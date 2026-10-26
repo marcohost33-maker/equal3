@@ -1,0 +1,12 @@
+title = "equal3 gitleaks configuration"
+
+[extend]
+useDefault = true
+
+# Reviewed false positive (2026-10-26): German prose in a historical roadmap,
+# reports/roadmaps/ROADMAP_V0718.md line 6 ("... auth. Trust-Policy, 2-Personen-Approval ...").
+[allowlist]
+description = "Reviewed false positives in imported research text"
+paths = ['''reports/roadmaps/ROADMAP_V0718\.md''']
+regexTarget = "line"
+regexes = ['''2-Personen-Approval''']

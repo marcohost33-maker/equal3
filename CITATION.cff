@@ -1,0 +1,28 @@
+cff-version: 1.2.0
+title: "Equal3 — research prototype for authenticated local state with external witnesses"
+message: "If you use this material, please cite it as below and state its research NO-GO status."
+type: software
+version: "0.7.22-research"
+date-released: 2026-10-26
+license: Apache-2.0
+repository-code: "https://github.com/marcohost33-maker/equal3"
+authors:
+  - name: "Coworker Research / Coworkerz"
+keywords:
+  - rollback detection
+  - authenticated state
+  - SQLite
+  - HMAC receipt chain
+  - external witness
+  - compare-and-swap
+  - Ed25519
+  - negative-first testing
+  - research software
+abstract: >
+  Equal3 is research code (release decision NO-GO, not for production) that studies how a single
+  host could prove that its local state was not rolled back. It combines a bounded delta codec, an
+  SQLite state store with version compare-and-swap and HMAC-chained receipts, and a trust domain
+  of anchor service, attested writer, root-authorised key rotation, signed epoch and commit
+  witnesses with request-lineage binding. Every audit round reports that a joint rollback of all
+  local components is not detected. Version 0.7.22-research is the state of 2026-10-25; the
+  repository adds documentation and a provenance check, and keeps all imported files unchanged.

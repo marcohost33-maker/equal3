@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Outputs of the historical runners and benchmarks when run inside research/
+research/EVIDENCE*/
+research/*.db
+research/*.sqlite
+research/*.sock
+
+# Local scratch
+*.log.tmp
+.DS_Store
+Thumbs.db

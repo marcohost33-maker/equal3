@@ -1,0 +1,3 @@
+# Keep every file byte-identical on checkout (no line-ending conversion):
+# tools/verify_provenance.py compares SHA-256 hashes of the imported files.
+* -text
