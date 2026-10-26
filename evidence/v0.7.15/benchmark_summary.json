@@ -1,0 +1,40 @@
+{
+  "method": "4 sweeps ABBA, 20 independent operations per sweep, 1 KiB/64 KiB",
+  "synthetic": true,
+  "benchmarks": [
+    {
+      "bytes": 1024,
+      "mode": "direct",
+      "count": 80,
+      "p50_ms": 4.349,
+      "p95_ms": 8.446
+    },
+    {
+      "bytes": 1024,
+      "mode": "coordinated",
+      "count": 80,
+      "p50_ms": 9.871,
+      "p95_ms": 17.014
+    },
+    {
+      "bytes": 65536,
+      "mode": "direct",
+      "count": 80,
+      "p50_ms": 4.998,
+      "p95_ms": 9.03
+    },
+    {
+      "bytes": 65536,
+      "mode": "coordinated",
+      "count": 80,
+      "p50_ms": 11.795,
+      "p95_ms": 20.181
+    }
+  ],
+  "sources": {
+    "writer_service_v0714.py": "59607ceea281e05a372e60bfd6d7827ccf0a196ce42521ca0f9bae91bb9812f5",
+    "anchored_writer_v0715.py": "ffa5d05cc98584be84bc5ca3aa0a6f90e59523e5d3384ab2b208217526456e87",
+    "anchor_protocol.py": "0b28b18c0c17c5f41ae766b3b24a9b178fa5d187004d1c41f90fb7bee41ff853",
+    "state_store.py": "89bce91c2cb78dffa6df3d58bc282a786a76762a9ffc21eb0780d8688fb15227"
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "project":"Equal3", "version":"0.7.21-research", "date":"2026-10-25", "decision":"NO_GO",
+  "local_evidence":{"baseline_tests":425,"added_tests":2,"grouped_tests_passed":427,"groups":12,"negative_first_expiry_old_accepts":true,"negative_first_expiry_new_denies":true},
+  "open_p0":["independent_nonrollback_commit_witness","legacy_writer_bypass","trusted_observer_time_and_fencing","patched_attested_sqlite","operational_key_separation_and_encryption","hardware_powerloss_and_network_partition_lab","independent_security_and_CH_DSG_review"],
+  "nonclaims":["not production ready","not multi-host tested","not independent immutable witness","not trusted-time proof","not independent signed artifact provenance"],
+  "require_all_p0_for_go":true
+}

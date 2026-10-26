@@ -1,0 +1,72 @@
+--- v079/state_store.py
++++ v0710/state_store.py
+@@ -253,9 +253,16 @@
+     def receipt(self, request_id:bytes):
+         if not isinstance(request_id,bytes) or len(request_id)!=16:
+             raise StoreError('request id must be 16 bytes')
+-        with closing(self._db()) as db:
+-            row=db.execute('SELECT base_version,committed_version,digest FROM receipts WHERE request_id=?',(request_id,)).fetchone()
+-            return Receipt(request_id,*row,True) if row else None
++        # Authenticated historical evidence is required even for read-only
++        # receipts: a bare SQLite SELECT must never be treated as a proof of
++        # committed state, especially after suspected media/offline tampering.
++        report, _ = self.inspect_request(request_id)
++        if report['receipt_auth'] != 'HMAC_CHAIN_V2':
++            raise IntegrityError('legacy unsealed receipt cannot authorize a result')
++        entry = report['request']
++        return (Receipt(request_id, entry['base_version'], entry['version'],
++                        bytes.fromhex(entry['digest_sha256']), True)
++                if entry is not None else None)
+ 
+     def _verified_snapshot(self, *, request_id=None):
+         """Use one pinned WAL read transaction for audit AND returned snapshot.
+@@ -425,6 +432,26 @@
+                     try: Path(str(temp_path)+suffix).unlink()
+                     except FileNotFoundError: pass
+ 
++    def _authenticated_replay(self, request_id: bytes, proposal_hash: bytes) -> Receipt:
++        """Only expose a replay after verifying the complete keyed receipt history.
++
++        This intentionally costs O(number-of-receipts); fast unauthenticated
++        replies are forbidden. Concurrent writers can advance the head, but
++        the authenticated receipt for this request remains immutable under the
++        supported append-only transaction model. An independent trust anchor
++        remains mandatory to detect a joint historic rollback.
++        """
++        info, _ = self.inspect_request(request_id)
++        if info['receipt_auth'] != 'HMAC_CHAIN_V2':
++            raise IntegrityError('legacy unsealed receipt cannot authorize a replay')
++        r = info['request']
++        if r is None:
++            raise IntegrityError('duplicate receipt disappeared during verification')
++        if not hmac.compare_digest(bytes.fromhex(r['proposal_hash']), proposal_hash):
++            raise ReplayError('request ID reused with different proposal')
++        return Receipt(request_id, r['base_version'], r['version'],
++                       bytes.fromhex(r['digest_sha256']), True)
++
+     def apply(self, proposal: bytes, *, fault=None):
+         """Optimistic authenticated pre-decode, then single SQLite CAS + receipt transaction.
+ 
+@@ -442,9 +469,7 @@
+             # Fast duplicate reply before expensive decoding. Rechecked after BEGIN.
+             old = db.execute('SELECT proposal_hash,base_version,committed_version,digest FROM receipts WHERE request_id=?',(rid,)).fetchone()
+             if old:
+-                if not hmac.compare_digest(old[0], proposal_hash):
+-                    raise ReplayError('request ID reused with different proposal')
+-                return Receipt(rid,old[1],old[2],old[3],True)
++                return self._authenticated_replay(rid, proposal_hash)
+             head = db.execute('SELECT version,value,digest FROM head WHERE id=1').fetchone()
+             if head is None:
+                 raise IntegrityError('head missing')
+@@ -466,10 +491,8 @@
+             if fault: fault('after_begin')
+             old = db.execute('SELECT proposal_hash,base_version,committed_version,digest FROM receipts WHERE request_id=?',(rid,)).fetchone()
+             if old:
+-                if not hmac.compare_digest(old[0], proposal_hash):
+-                    raise ReplayError('request ID reused with different proposal')
+                 db.execute('ROLLBACK'); started = False
+-                return Receipt(rid,old[1],old[2],old[3],True)
++                return self._authenticated_replay(rid, proposal_hash)
+             if fault: fault('after_receipt_check')
+             # Both version and contents rechecked: no lost update / ABA after pre-decode.
+             actual = db.execute('SELECT version,digest FROM head WHERE id=1').fetchone()

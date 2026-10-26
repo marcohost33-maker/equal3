@@ -1,0 +1,18 @@
+--- v0720/external_commit_witness_v0720.py
++++ v0721/external_commit_witness_v0720.py
+@@ -222,6 +222,15 @@
+             db.execute('BEGIN IMMEDIATE')
+             try:
+                 old=self._load(db)
++                # Time-of-check/time-of-use: the signature was checked before BEGIN IMMEDIATE.
++                # Enforce the (already authenticated) lifetime again after acquiring the
++                # write lock, immediately before accepting an idempotent response or CAS.
++                # This uses the local wall clock; independent trusted time is still P0.
++                expires=evidence['statement']['expires_unix']
++                issued=evidence['statement']['issued_unix']
++                current=int(time.time())
++                if current < issued or current > expires:
++                    raise ReviewDenied('postfinal observation expired before witness CAS')
+                 if old['store_id']!=intent.store_id:raise AnchorHold('foreign store')
+                 if old['version']==intent.version:
+                     if old['digest']!=intent.digest or old['request_id']!=intent.request_id:

@@ -1,0 +1,9 @@
+cycle,version,method,n,p50_ms,p95_ms
+1,v076,prepare_plus_finalize,60,3.42341,6.90243
+1,v076,status,60,0.29912,0.44725
+2,v077,prepare_plus_finalize,60,3.42825,9.35033
+2,v077,status,60,0.33723,0.50798
+3,v077,prepare_plus_finalize,60,5.51023,11.73078
+3,v077,status,60,0.40174,0.60263
+4,v076,prepare_plus_finalize,60,6.33086,19.37195
+4,v076,status,60,0.42511,0.65746

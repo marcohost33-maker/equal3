@@ -1,0 +1,12 @@
+{
+  "version": "v0722",
+  "date": "2026-10-25",
+  "research_only": true,
+  "old_sha256": "0628452d697fb605b02d8686c51483dc62cd0637e3b9d88ff4cbf109a955f3b9",
+  "new_sha256": "0fa5ccc1d22d521dcba721fa607d97f2cfecde050cfd644d6a265bcb5e1e181f",
+  "negative_first": "v0721 test_different_request_same_digest_at_same_version_must_hold FAILED (expected safety invariant not enforced)",
+  "fixed": "v0722 same test PASS",
+  "focused_test_total": 29,
+  "full_suite": "NOT VERIFIED: legacy multi-process anchor_wire suite TIMEOUT",
+  "production_release": "NO-GO"
+}

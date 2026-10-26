@@ -1,0 +1,74 @@
+[
+  {
+    "source": "/mnt/data/equal3_v0721_fresh/Equal3_v0721_Research/external_commit_witness_v0720.py",
+    "sha256": "0628452d697fb605b02d8686c51483dc62cd0637e3b9d88ff4cbf109a955f3b9",
+    "n": 45,
+    "median_ms": 2.106562,
+    "p95_ms": 2.427687,
+    "variant": "v0721",
+    "sequence": "ABBA"
+  },
+  {
+    "source": "/mnt/data/equal3_v0722_review/Equal3_v0721_Research/external_commit_witness_v0720.py",
+    "sha256": "0fa5ccc1d22d521dcba721fa607d97f2cfecde050cfd644d6a265bcb5e1e181f",
+    "n": 45,
+    "median_ms": 2.034747,
+    "p95_ms": 2.26795,
+    "variant": "v0722",
+    "sequence": "ABBA"
+  },
+  {
+    "source": "/mnt/data/equal3_v0722_review/Equal3_v0721_Research/external_commit_witness_v0720.py",
+    "sha256": "0fa5ccc1d22d521dcba721fa607d97f2cfecde050cfd644d6a265bcb5e1e181f",
+    "n": 45,
+    "median_ms": 2.129376,
+    "p95_ms": 2.590898,
+    "variant": "v0722",
+    "sequence": "ABBA"
+  },
+  {
+    "source": "/mnt/data/equal3_v0721_fresh/Equal3_v0721_Research/external_commit_witness_v0720.py",
+    "sha256": "0628452d697fb605b02d8686c51483dc62cd0637e3b9d88ff4cbf109a955f3b9",
+    "n": 45,
+    "median_ms": 2.11865,
+    "p95_ms": 3.074162,
+    "variant": "v0721",
+    "sequence": "ABBA"
+  },
+  {
+    "source": "/mnt/data/equal3_v0722_review/Equal3_v0721_Research/external_commit_witness_v0720.py",
+    "sha256": "0fa5ccc1d22d521dcba721fa607d97f2cfecde050cfd644d6a265bcb5e1e181f",
+    "n": 45,
+    "median_ms": 2.191157,
+    "p95_ms": 2.74137,
+    "variant": "v0722",
+    "sequence": "BAAB"
+  },
+  {
+    "source": "/mnt/data/equal3_v0721_fresh/Equal3_v0721_Research/external_commit_witness_v0720.py",
+    "sha256": "0628452d697fb605b02d8686c51483dc62cd0637e3b9d88ff4cbf109a955f3b9",
+    "n": 45,
+    "median_ms": 2.20648,
+    "p95_ms": 2.729944,
+    "variant": "v0721",
+    "sequence": "BAAB"
+  },
+  {
+    "source": "/mnt/data/equal3_v0721_fresh/Equal3_v0721_Research/external_commit_witness_v0720.py",
+    "sha256": "0628452d697fb605b02d8686c51483dc62cd0637e3b9d88ff4cbf109a955f3b9",
+    "n": 45,
+    "median_ms": 2.275072,
+    "p95_ms": 3.097005,
+    "variant": "v0721",
+    "sequence": "BAAB"
+  },
+  {
+    "source": "/mnt/data/equal3_v0722_review/Equal3_v0721_Research/external_commit_witness_v0720.py",
+    "sha256": "0fa5ccc1d22d521dcba721fa607d97f2cfecde050cfd644d6a265bcb5e1e181f",
+    "n": 45,
+    "median_ms": 2.337534,
+    "p95_ms": 2.960174,
+    "variant": "v0722",
+    "sequence": "BAAB"
+  }
+]

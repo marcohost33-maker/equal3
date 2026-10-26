@@ -1,0 +1,31 @@
+{
+  "version": "v0.7.14-research",
+  "date": "2026-10-25",
+  "tested_python": "3.13.5",
+  "tested_sqlite": "3.46.1",
+  "tests": {
+    "legacy_batches": {
+      "test_anchor_wire": 91,
+      "test_equal3": 57,
+      "test_store": 94,
+      "test_runtime_gate_v0711": 23
+    },
+    "new_writer": 21,
+    "passed_total": 286
+  },
+  "monolithic": {
+    "status": "TIMEOUT_NO_PASS",
+    "reason": "undetermined test interaction/resource delay; separate process batches finished"
+  },
+  "gates": {
+    "patched_sqlite": "OPEN",
+    "mandatory_signed_runtime": "CODE_PATH_PREPARED, REAL_RUNTIME_HOLD",
+    "external_cas_anchor": "OPEN",
+    "os_uid_isolation": "TESTED_ROOT_HOST_FIXTURE_ONLY",
+    "encryption": "OPEN",
+    "power_loss": "OPEN",
+    "security_review": "OPEN"
+  },
+  "openssl_or_hardware_attestation": "NONE",
+  "claims": "No signed manifest, no GO"
+}

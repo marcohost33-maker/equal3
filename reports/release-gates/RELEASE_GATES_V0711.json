@@ -1,0 +1,31 @@
+{
+  "as_of": "2026-10-25",
+  "candidate_version": "0.7.11-research",
+  "file_manifest": "SHA256 local integrity only, no authenticated project provenance",
+  "new_test_cases": 21,
+  "project": "=== / Equal3",
+  "regressions": {
+    "failed": 0,
+    "focused_new_cases": 21,
+    "full_runner_log": "EVIDENCE_V0711/initial_final_suite_240_tests.log",
+    "passed": 240
+  },
+  "release_decision": "NO_GO",
+  "signature_policy": "Ed25519/strict-json/deployment-bound/30-day-expiry/provenance-matched; tests only",
+  "sqlite_effective": {
+    "attested": false,
+    "patched_build_executed": false,
+    "sqlite_version": "3.46.1",
+    "wal_reset_upstream_safe": false
+  },
+  "unresolved_p0": [
+    "official patched SQLite binary installed and tested under all WAL clients",
+    "externally pinned signing root and approval issuer",
+    "independent irreversible monotonic anchor",
+    "OS-enforced exclusive writer path",
+    "durable external commit attestation and recovery",
+    "DB/sidecar/temp/backup encryption and key management",
+    "VFS/power-loss/ENOSPC stress and external security review",
+    "independent privacy/compliance release authorization"
+  ]
+}

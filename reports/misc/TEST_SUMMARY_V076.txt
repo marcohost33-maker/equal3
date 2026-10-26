@@ -1,0 +1,5 @@
+Equal3 v0.7.6-research | 2026-10-24
+FULL SUITE: 167/167 PASS (58.465 s)
+COVERAGE SUITE: 167/167 PASS | statement+branch total 80% (daemon process not instrumented)
+BENCHMARK: see EVIDENCE_V076/benchmark_v076.json | 48 samples per method and payload
+RELEASE: NO-GO

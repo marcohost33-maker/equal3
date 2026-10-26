@@ -1,0 +1,26 @@
+{
+  "project": "=== / Equal3",
+  "version": "0.7.8-research",
+  "as_of": "2026-10-24",
+  "decision": "NO_GO",
+  "implemented_research": [
+    "domain_separated_hmac_seals_authority_and_audit_root",
+    "offline_nonce_and_review_log_mutations_fail_closed",
+    "atomic_audit_root_updates",
+    "snapshot_consistent_read_verification",
+    "no_silent_legacy_migration",
+    "read_only_runtime_preflight"
+  ],
+  "closed_in_production": [],
+  "blockers": [
+    "upstream_safe_sqlite_runtime_unavailable_in_current_python_3.13.5",
+    "independent_nonrollbackable_anchor_absent",
+    "writer_anchor_and_key_os_isolation_absent",
+    "trusted_independent_commit_attestation_absent",
+    "plaintext_database_wal_temp_and_backups",
+    "vfs_power_loss_torn_sector_and_fsync_tests_absent",
+    "independent_security_and_privacy_release_review_absent",
+    "ledger_unbounded_growth_policy_and_performance_not_qualified"
+  ],
+  "note": "No external release authorization. Research overrides are not a release path."
+}

@@ -1,0 +1,100 @@
+======================================================================
+ERROR: test_genesis_audit_root_present (test_anchor_v078.LedgerIntegrityTests.test_genesis_audit_root_present)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/mnt/data/equal3_078_work/Equal3_v077_Research/test_anchor_v078.py", line 39, in test_genesis_audit_root_present
+    row=db.execute('SELECT audit_root FROM authority WHERE id=1').fetchone()
+        ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+sqlite3.OperationalError: no such column: audit_root
+
+======================================================================
+ERROR: test_raw_sql_cannot_mend_root_without_seal (test_anchor_v078.LedgerIntegrityTests.test_raw_sql_cannot_mend_root_without_seal)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/mnt/data/equal3_078_work/Equal3_v077_Research/test_anchor_v078.py", line 77, in test_raw_sql_cannot_mend_root_without_seal
+    self.offline('UPDATE authority SET audit_root=? WHERE id=1',(b'\x00'*32,))
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/data/equal3_078_work/Equal3_v077_Research/test_anchor_v078.py", line 27, in offline
+    db.execute(sql,params); db.commit()
+    ~~~~~~~~~~^^^^^^^^^^^^
+sqlite3.OperationalError: no such column: audit_root
+
+======================================================================
+ERROR: test_root_modified_without_seal_key_fail_closed (test_anchor_v078.LedgerIntegrityTests.test_root_modified_without_seal_key_fail_closed)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/mnt/data/equal3_078_work/Equal3_v077_Research/test_anchor_v078.py", line 64, in test_root_modified_without_seal_key_fail_closed
+    self.commit_one();self.offline("UPDATE authority SET audit_root=? WHERE id=1",(b'\x77'*32,))
+                      ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/data/equal3_078_work/Equal3_v077_Research/test_anchor_v078.py", line 27, in offline
+    db.execute(sql,params); db.commit()
+    ~~~~~~~~~~^^^^^^^^^^^^
+sqlite3.OperationalError: no such column: audit_root
+
+======================================================================
+FAIL: test_consume_nonce_deletion_fail_closed (test_anchor_v078.LedgerIntegrityTests.test_consume_nonce_deletion_fail_closed)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/mnt/data/equal3_078_work/Equal3_v077_Research/test_anchor_v078.py", line 49, in test_consume_nonce_deletion_fail_closed
+    with self.assertRaises(AnchorHold):self.backend.status()
+         ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+AssertionError: AnchorHold not raised
+
+======================================================================
+FAIL: test_consume_operation_modified_fail_closed (test_anchor_v078.LedgerIntegrityTests.test_consume_operation_modified_fail_closed)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/mnt/data/equal3_078_work/Equal3_v077_Research/test_anchor_v078.py", line 53, in test_consume_operation_modified_fail_closed
+    with self.assertRaises(AnchorHold):self.backend.status()
+         ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+AssertionError: AnchorHold not raised
+
+======================================================================
+FAIL: test_inserted_fake_nonce_fail_closed (test_anchor_v078.LedgerIntegrityTests.test_inserted_fake_nonce_fail_closed)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/mnt/data/equal3_078_work/Equal3_v077_Research/test_anchor_v078.py", line 73, in test_inserted_fake_nonce_fail_closed
+    with self.assertRaises(AnchorHold):self.backend.status()
+         ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+AssertionError: AnchorHold not raised
+
+======================================================================
+FAIL: test_inserted_fake_review_fail_closed (test_anchor_v078.LedgerIntegrityTests.test_inserted_fake_review_fail_closed)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/mnt/data/equal3_078_work/Equal3_v077_Research/test_anchor_v078.py", line 69, in test_inserted_fake_review_fail_closed
+    with self.assertRaises(AnchorHold):self.backend.status()
+         ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+AssertionError: AnchorHold not raised
+
+======================================================================
+FAIL: test_legacy_v077_schema_without_audit_root_is_no_go (test_anchor_v078.LedgerIntegrityTests.test_legacy_v077_schema_without_audit_root_is_no_go)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/mnt/data/equal3_078_work/Equal3_v077_Research/test_anchor_v078.py", line 93, in test_legacy_v077_schema_without_audit_root_is_no_go
+    with self.assertRaises(AnchorHold):
+         ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+AssertionError: AnchorHold not raised
+
+======================================================================
+FAIL: test_review_row_deleted_fail_closed (test_anchor_v078.LedgerIntegrityTests.test_review_row_deleted_fail_closed)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/mnt/data/equal3_078_work/Equal3_v077_Research/test_anchor_v078.py", line 61, in test_review_row_deleted_fail_closed
+    with self.assertRaises(AnchorHold):self.backend.status()
+         ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+AssertionError: AnchorHold not raised
+
+======================================================================
+FAIL: test_review_row_modified_fail_closed (test_anchor_v078.LedgerIntegrityTests.test_review_row_modified_fail_closed)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/mnt/data/equal3_078_work/Equal3_v077_Research/test_anchor_v078.py", line 57, in test_review_row_modified_fail_closed
+    with self.assertRaises(AnchorHold):self.backend.status()
+         ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+AssertionError: AnchorHold not raised
+
+----------------------------------------------------------------------
+Ran 12 tests in 0.134s
+
+FAILED (failures=7, errors=3)

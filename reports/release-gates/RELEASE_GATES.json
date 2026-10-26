@@ -1,0 +1,38 @@
+{
+  "project": "=== / Equal3",
+  "candidate_version": "0.7.5-research",
+  "as_of": "2026-10-24",
+  "decision": "NO_GO",
+  "independent_durable_anchor": false,
+  "os_enforced_sole_writer": false,
+  "authenticated_external_commit_evidence": false,
+  "encrypted_live_store_and_backups": false,
+  "physical_vfs_powerloss_validation": false,
+  "independent_security_approval": false,
+  "implemented_research_features": [
+    "V2 receipt-linked request snapshot read",
+    "two-phase memory CAS authority simulator",
+    "explicit prepared/committed-pending recovery classification",
+    "separate reviewer credential mock",
+    "fail-closed abort/finalize preconditions",
+    "joint rollback counterexample and thread CAS tests",
+    "microbenchmarks and history growth dataset"
+  ],
+  "blocking_release_gates": [
+    "P0-ANCHOR-INDEPENDENT-PERSISTENT",
+    "P0-RAW-WRITER-OS-ISOLATION",
+    "P0-ANCHOR-COMMIT-SERVICE-PROVENANCE",
+    "P0-ENCRYPT-DB-WAL-BACKUP-KEYS",
+    "P0-POWERLOSS-VFS-FAULT-LAB",
+    "P0-INDEPENDENT-SECURITY-REVIEW"
+  ],
+  "promotion_policy": "NO-GO cannot be changed by green tests, self-signed metadata, or a process-local simulator",
+  "evidence": {
+    "tests_passed": 139,
+    "new_tests": 26,
+    "combined_statement_branch_coverage_percent_rounded": 87,
+    "python": "3.13.5",
+    "sqlite": "3.46.1",
+    "benchmark_method": "synthetic 2 runs x 24 operations per condition, local only"
+  }
+}

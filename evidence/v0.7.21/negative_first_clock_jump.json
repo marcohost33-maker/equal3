@@ -1,0 +1,14 @@
+{
+  "v0720_negative_control": {
+    "accepted_expired_commit": true,
+    "source_file": "/mnt/data/equal3_v0720_work/external_commit_witness_v0720.py",
+    "version": 1,
+    "source_sha256": "8fb1d5d3c31c0f3df9d3f742848540f8f9b59031ff3b33cd58af102fa716c4be"
+  },
+  "v0721_after_fix": {
+    "accepted_expired_commit": false,
+    "denial": "ReviewDenied",
+    "source_file": "/mnt/data/equal3_v0721_work/external_commit_witness_v0720.py",
+    "source_sha256": "0628452d697fb605b02d8686c51483dc62cd0637e3b9d88ff4cbf109a955f3b9"
+  }
+}

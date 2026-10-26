@@ -1,0 +1,51 @@
+--- /mnt/data/equal3_v0721_fresh/Equal3_v0721_Research/external_commit_witness_v0720.py	2026-10-25 18:43:12.000000000 +0000
++++ external_commit_witness_v0720.py	2026-10-25 19:16:45.982742657 +0000
+@@ -331,12 +331,45 @@
+         a=self._coordinator.anchor.status()
+         if a.pending is not None:raise AnchorHold('pending anchor review; HOLD')
+         floor=self._commit_witness.floor(deployment_id=self._commit_deployment,store_id=a.committed.store_id)
+-        snap=self._coordinator.read()
+-        if snap.version!=floor['version'] or snap.digest.hex()!=floor['digest'] or a.committed.version!=floor['version'] or a.committed.digest!=floor['digest']:
++        # A version and final-state hash do not identify the committing request.
++        # Two fully authenticated forks can write identical bytes at the same
++        # version using different request IDs.  Bind the WITNESS request ID to
++        # the receipt at that exact version in one pinned, authenticated
++        # StateStore snapshot.  Do not trust an unauthenticated SQL lookup.
++        if floor['version'] == 0:
++            if floor['request_id'] is not None:
++                raise AnchorHold('genesis commit witness carries request identity: HOLD')
++            info, snap = self._coordinator.store.read_verified()
++        else:
++            rid = floor['request_id']
++            if type(rid) is not str or len(rid) != 32:
++                raise AnchorHold('commit witness request identity absent: HOLD')
++            try:
++                raw_rid = bytes.fromhex(rid)
++            except ValueError as exc:
++                raise AnchorHold('commit witness request identity malformed: HOLD') from exc
++            info, snap = self._coordinator.store.inspect_request(raw_rid)
++            receipt = info.get('request')
++            if (info.get('receipt_auth') != 'HMAC_CHAIN_V2' or
++                type(receipt) is not dict or
++                receipt.get('request_id') != rid or
++                receipt.get('version') != floor['version'] or
++                receipt.get('digest_sha256') != floor['digest']):
++                raise AnchorHold('commit witness disagrees with authenticated final receipt: HOLD')
++        if (info.get('receipt_auth') != 'HMAC_CHAIN_V2' or
++            info.get('store_id') != a.committed.store_id or
++            snap.version != floor['version'] or snap.digest.hex() != floor['digest'] or
++            a.committed.version != floor['version'] or a.committed.digest != floor['digest']):
+             raise AnchorHold('external commit floor mismatches local state: HOLD')
+         later=self._commit_witness.floor(deployment_id=self._commit_deployment,store_id=a.committed.store_id)
+-        if later['version']!=floor['version'] or later['digest']!=floor['digest']:
++        if (later['version']!=floor['version'] or later['digest']!=floor['digest'] or
++            later['request_id']!=floor['request_id']):
+             raise AnchorHold('external witness changed while reading: HOLD')
++        # This does not create atomicity across the local DB and independent
++        # services, but detects an intervening authority transition.
++        again=self._coordinator.anchor.status()
++        if again.pending is not None or again.committed != a.committed:
++            raise AnchorHold('anchor changed during witnessed read: HOLD')
+         return floor
+     def dispatch(self,op,rid,body):
+         with self._lock:

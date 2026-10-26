@@ -1,0 +1,5 @@
+round,variant,journal,source_sha256,sqlite_version,n,transition_p50_ms,transition_p95_ms,status_p50_ms,status_p95_ms
+1,Equal3_v078_Research,wal,7b05e4e36c442370f8c4a8ca34589ab2c4f3fbb4d2f1f125907fd4743ae30064,3.46.1,80,5.3435,7.7949,1.0667,1.7262
+2,Equal3_v079_Research,delete,b65a5488be7c4e0dd275e65b574de645490bd2e45bbecf2b500e63673dcffa3b,3.46.1,80,7.6615,10.125,1.14,1.8064
+3,Equal3_v079_Research,delete,b65a5488be7c4e0dd275e65b574de645490bd2e45bbecf2b500e63673dcffa3b,3.46.1,80,8.1225,11.046,1.1421,1.8754
+4,Equal3_v078_Research,wal,7b05e4e36c442370f8c4a8ca34589ab2c4f3fbb4d2f1f125907fd4743ae30064,3.46.1,80,4.8298,7.5987,1.0759,1.6772

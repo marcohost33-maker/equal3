@@ -1,0 +1,45 @@
+{
+  "source": "test_external_commit_witness_v0720.py",
+  "results": [
+    {
+      "scenario": "joint_store_and_anchor_rollback",
+      "observed": "legacy coordinator MATCH; new commit-witness gated writer HOLD"
+    },
+    {
+      "scenario": "joint_rollback_including_commit_witness",
+      "observed": "old checkpoint can be accepted again: deliberately UNSAFE"
+    },
+    {
+      "scenario": "checkpoint_before_anchor_finalization",
+      "observed": "observer signature refuses: ReviewDenied"
+    },
+    {
+      "scenario": "postfinal_attestation_then_store_rollback",
+      "observed": "witness may CAS, gated client HOLD (TOCTOU remains)"
+    },
+    {
+      "scenario": "missing_commit_checkpoint",
+      "observed": "gated writer constructor HOLD"
+    },
+    {
+      "scenario": "malicious_wrong_attester_signature",
+      "observed": "commit CAS refused"
+    },
+    {
+      "scenario": "replayed_signed_nonce_reply",
+      "observed": "client HOLD"
+    },
+    {
+      "scenario": "witness_database_row_or_seal_modified",
+      "observed": "HOLD"
+    },
+    {
+      "scenario": "witness_signer_replaced_on_restart",
+      "observed": "HOLD"
+    },
+    {
+      "scenario": "witness_server_separate_process_outage",
+      "observed": "client HOLD"
+    }
+  ]
+}

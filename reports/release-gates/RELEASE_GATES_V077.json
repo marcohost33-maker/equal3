@@ -1,0 +1,25 @@
+{
+  "project": "=== / Equal3",
+  "version": "v0.7.7-research",
+  "date": "2026-10-24",
+  "release_status": "NO_GO",
+  "claims": {
+    "full_regression": "176/176 PASS",
+    "new_negative_tests": 9,
+    "source": "original v0.7.6 source plus additive seal and preflight",
+    "runtime_sqlite": "3.46.1",
+    "runtime_wal_reset_safe": false,
+    "focused_coverage_percent": 62
+  },
+  "blocking_gates": [
+    "patched SQLite runtime across BOTH stores",
+    "independently monotonic anchor",
+    "OS writer+key domain isolation",
+    "commit evidence independent",
+    "DB/WAL/backups encryption",
+    "VFS/powerloss test lab",
+    "independent security review",
+    "legacy authority attestation"
+  ],
+  "policy": "Never promote based on local tests or research-only override"
+}

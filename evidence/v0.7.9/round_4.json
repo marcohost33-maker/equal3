@@ -1,0 +1,18 @@
+{
+  "variant": "Equal3_v078_Research",
+  "journal": "wal",
+  "sqlite_version": "3.46.1",
+  "source_sha256": "7b05e4e36c442370f8c4a8ca34589ab2c4f3fbb4d2f1f125907fd4743ae30064",
+  "round": 4,
+  "n": 80,
+  "transition": {
+    "p50_ms": 4.8298,
+    "p95_ms": 7.5987,
+    "count": 80
+  },
+  "status": {
+    "p50_ms": 1.0759,
+    "p95_ms": 1.6772,
+    "count": 80
+  }
+}

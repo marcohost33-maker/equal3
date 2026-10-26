@@ -1,0 +1,13 @@
+{
+  "date": "2026-10-24",
+  "project": "=== / Equal3",
+  "version": "v0.7.6-research",
+  "source_zip_sha256": "7b30276e770cc5944ed9edec7da2f96a4c3a3bfbafea31a060709316db872811",
+  "python": "3.13.5",
+  "sqlite": "3.46.1",
+  "platform": "Linux-6.18.55-x86_64-with-glibc2.41",
+  "tests": 167,
+  "test_status": "PASS",
+  "branch_statement_coverage_total_percent": 80,
+  "known_limitations": "Child authority process not instrumented by coverage report; no physical powerloss, real KMS, separated UID, encryption or independent review."
+}

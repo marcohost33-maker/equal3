@@ -1,0 +1,27 @@
+======================================================================
+FAIL: test_plain_v076_legacy_authority_refused (test_anchor_v077.AnchorSealTests.test_plain_v076_legacy_authority_refused)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/mnt/data/equal3_078_work/Equal3_v077_Research/anchor_wire.py", line 238, in _load
+    row=db.execute('SELECT store_id,version,digest,pending,audit_root,seal FROM authority WHERE id=1').fetchone()
+        ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+sqlite3.OperationalError: no such column: audit_root
+
+The above exception was the direct cause of the following exception:
+
+anchor_protocol.AnchorHold: unsealed audit ledger: independent migration required
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/mnt/data/equal3_078_work/Equal3_v077_Research/test_anchor_v077.py", line 88, in test_plain_v076_legacy_authority_refused
+    with self.assertRaisesRegex(AnchorHold,'unsealed legacy'):
+         ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: "unsealed legacy" does not match "unsealed audit ledger: independent migration required"
+
+----------------------------------------------------------------------
+Ran 188 tests in 57.913s
+
+FAILED (failures=1)
+Command exited with non-zero status 1
+wall=58.98 peak_RSS_kb=106440

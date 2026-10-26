@@ -1,0 +1,29 @@
+{
+  "project": "=== / Equal3",
+  "candidate": "v0.7.6-research",
+  "date": "2026-10-24",
+  "decision": "NO_GO",
+  "verified_locally": [
+    "sqlite-backed durable CAS and pending intent",
+    "unix socket subprocess RPC HMAC/nonce/replay negative tests",
+    "writer-peer-uid policy gate on Linux",
+    "reviewer token cannot be created by writer RPC",
+    "restart, abrupt process exit and DB-rollback tests",
+    "joint two-database rollback counterexample",
+    "synthetic local ABBA benchmark"
+  ],
+  "blocking_p0": {
+    "INDEPENDENT_MONOTONIC_ANCHOR": "OPEN: same-host filesystem can be jointly rolled back",
+    "REAL_SOLE_WRITER_OS_IDENTITY": "OPEN: tests share UID and raw StateStore.apply remains accessible",
+    "EXTERNAL_COMMIT_PROVENANCE": "OPEN: coordinator inspects local SQLite; no independent remote attester",
+    "AT_REST_ENCRYPTION": "OPEN: SQLite/WAL/SHM/temp/backups are plaintext",
+    "VFS_POWERFAIL_LAB": "OPEN: no torn-sector, fsync or physical power-failure simulation",
+    "INDEPENDENT_SECURITY_REVIEW": "OPEN: no third-party security reviewer/pentest"
+  },
+  "notes": [
+    "No GitHub changes, commits or deployment",
+    "Green tests establish only measured paths",
+    "No cross-machine availability or throughput claim",
+    "Approvals in tests are HMAC fixtures, not independent human approval"
+  ]
+}

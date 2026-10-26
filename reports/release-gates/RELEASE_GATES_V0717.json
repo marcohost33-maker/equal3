@@ -1,0 +1,23 @@
+{
+  "project": "Equal3",
+  "candidate": "v0.7.17 research",
+  "as_of": "2026-10-25",
+  "decision": "NO_GO",
+  "implemented": [
+    "attester_key_deployment_store_binding_local_HMAC",
+    "fail_closed_legacy_unbound_anchor",
+    "negative_restart_rekey_tests",
+    "duplicate_trust_row_reject"
+  ],
+  "blocking_P0": [
+    "external_root_and_key_provisioning",
+    "monotonic_independent_antirollback_anchor",
+    "commit_observation_TOCTOU",
+    "patched_sqlite_effectively_loaded",
+    "OS_writer_MAC",
+    "encryption_and_key_lifecycle",
+    "hardware_fault_lab",
+    "independent_security_compliance_signoff"
+  ],
+  "warning": "No irreversible or independent trust root from HMAC policy bound to same local authority seal key."
+}

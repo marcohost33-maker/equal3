@@ -1,0 +1,10 @@
+{
+  "original_zip": "EQUAL3_v079_DELETE_JOURNAL_UID_RESEARCH_2026-10-25.zip",
+  "original_zip_sha256": "eae3e8c5e8403c2fbf91722e79805962094fd2c241654b8311d5faf7d1cb5f80",
+  "source_patch_files": [
+    "state_store.py",
+    "release_preflight_v078.py",
+    "runtime_evidence_v0710.py",
+    "test_v0710_security.py"
+  ]
+}

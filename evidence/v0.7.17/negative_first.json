@@ -1,0 +1,23 @@
+{
+  "project": "Equal3",
+  "baseline": "v0.7.16",
+  "candidate": {
+    "wrong_signer_after_restart": "REJECTED",
+    "wrong_deployment_after_restart": "REJECTED",
+    "policy_seal_corruption": "REJECTED",
+    "policy_removal": "REJECTED",
+    "legacy_unbound": "REJECTED",
+    "extra_policy_row": "REJECTED"
+  },
+  "negative_first": {
+    "restarted_with_different_Ed25519_key_and_deployment": "ACCEPTED in v0716; anchor incremented without original pinned attester",
+    "original_anchor_version_after_attack": 1,
+    "attempts_without_authorized_reviewer_secret": "not demonstrated; scope is unauthorized policy substitution at restart"
+  },
+  "limitations": [
+    "HMAC policy under same local seal key",
+    "independent root/anti rollback absent",
+    "legacy parent PersistentCASAnchor remains possible if credentials are exposed",
+    "existing v0716 anchors require independently attested migration"
+  ]
+}

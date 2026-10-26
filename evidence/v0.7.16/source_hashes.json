@@ -1,0 +1,20 @@
+{
+  "candidate_source_sha256": {
+    "anchor_wire.py": "488a33d53cdd69a962c5c89dcf6048bda0e8df2e994c7495b5ae0232cd755427",
+    "anchor_protocol.py": "fe3b6d37f4decc4d7663dbc2c71173e0f12869d98b47aa8731eb02bdab33e235",
+    "anchored_writer_v0715.py": "ffa5d05cc98584be84bc5ca3aa0a6f90e59523e5d3384ab2b208217526456e87",
+    "commit_evidence_v0716.py": "535f5a826c6559e323e3505aadfd0f611882e84d6ced444248969b1c49a65985",
+    "test_anchor_wire.py": "220b20734d5f0e477f9b5d1f8f881a5b82ab719b93e4cbe5581e3e79a1caec64",
+    "test_anchor_v079.py": "7e9374eb8eb79c3ed798cf52a8fa67c17f40e844b98ee85c1b33482eb7919fb7",
+    "test_attested_commit_v0716.py": "ec76c047eddd2ed89392e7900c66b107a94b43cdb803328d7964e972ce561556",
+    "run_v0716_suites.py": "f110788792bd07bd10d8836ac388e623b5cade2cec907ac26a22231cbd64e65d"
+  },
+  "baseline_source_sha256": {
+    "anchor_wire.py": "b65a5488be7c4e0dd275e65b574de645490bd2e45bbecf2b500e63673dcffa3b",
+    "anchor_protocol.py": "0b28b18c0c17c5f41ae766b3b24a9b178fa5d187004d1c41f90fb7bee41ff853",
+    "anchored_writer_v0715.py": "ffa5d05cc98584be84bc5ca3aa0a6f90e59523e5d3384ab2b208217526456e87",
+    "test_anchor_wire.py": "b646cf2c3a373ca1cb4df0597adca8f2e5b59ef302e009033a22da7163c5c1da",
+    "test_anchor_v079.py": "f46bdecc5f1599f0e8dea238c90296a0e90571cb457447853bbfda213d7f462d"
+  },
+  "baseline_zip_sha256": "f4eddd98eb768ded2257d9cc9a8950b93d25a7e6af2712034655d686dabee277"
+}

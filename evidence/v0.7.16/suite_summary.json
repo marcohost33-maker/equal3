@@ -1,0 +1,44 @@
+{
+  "anchor": {
+    "tests": 91,
+    "status": "PASS",
+    "returncode": 0,
+    "seconds": 33.792
+  },
+  "equal": {
+    "tests": 57,
+    "status": "PASS",
+    "returncode": 0,
+    "seconds": 12.908
+  },
+  "store": {
+    "tests": 96,
+    "status": "PASS",
+    "returncode": 0,
+    "seconds": 21.388
+  },
+  "runtime": {
+    "tests": 21,
+    "status": "PASS",
+    "returncode": 0,
+    "seconds": 0.816
+  },
+  "protected_writer": {
+    "tests": 21,
+    "status": "PASS",
+    "returncode": 0,
+    "seconds": 3.608
+  },
+  "new_coordinated_writer": {
+    "tests": 23,
+    "status": "PASS",
+    "returncode": 0,
+    "seconds": 1.202
+  },
+  "attested_gate": {
+    "tests": 24,
+    "status": "PASS",
+    "returncode": 0,
+    "seconds": 1.332
+  }
+}

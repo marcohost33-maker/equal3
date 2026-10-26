@@ -1,0 +1,23 @@
+START anchor
+anchor {'status': 'PASS', 'count': 91, 'elapsed_seconds': 36.659, 'returncode': 0}
+START equal
+equal {'status': 'PASS', 'count': 57, 'elapsed_seconds': 12.729, 'returncode': 0}
+START store
+store {'status': 'PASS', 'count': 96, 'elapsed_seconds': 22.161, 'returncode': 0}
+START runtime
+runtime {'status': 'PASS', 'count': 21, 'elapsed_seconds': 1.14, 'returncode': 0}
+START writer
+writer {'status': 'PASS', 'count': 21, 'elapsed_seconds': 3.907, 'returncode': 0}
+START coordinator
+coordinator {'status': 'PASS', 'count': 23, 'elapsed_seconds': 1.12, 'returncode': 0}
+START attested
+attested {'status': 'PASS', 'count': 24, 'elapsed_seconds': 1.272, 'returncode': 0}
+START policy
+policy {'status': 'PASS', 'count': 14, 'elapsed_seconds': 1.046, 'returncode': 0}
+START root_rotation
+root_rotation {'status': 'PASS', 'count': 28, 'elapsed_seconds': 1.389, 'returncode': 0}
+START external_witness
+external_witness {'status': 'PASS', 'count': 26, 'elapsed_seconds': 1.666, 'returncode': 0}
+START commit_witness
+commit_witness {'status': 'PASS', 'count': 24, 'elapsed_seconds': 1.376, 'returncode': 0}
+SUMMARY {"anchor": {"status": "PASS", "count": 91, "elapsed_seconds": 36.659, "returncode": 0}, "equal": {"status": "PASS", "count": 57, "elapsed_seconds": 12.729, "returncode": 0}, "store": {"status": "PASS", "count": 96, "elapsed_seconds": 22.161, "returncode": 0}, "runtime": {"status": "PASS", "count": 21, "elapsed_seconds": 1.14, "returncode": 0}, "writer": {"status": "PASS", "count": 21, "elapsed_seconds": 3.907, "returncode": 0}, "coordinator": {"status": "PASS", "count": 23, "elapsed_seconds": 1.12, "returncode": 0}, "attested": {"status": "PASS", "count": 24, "elapsed_seconds": 1.272, "returncode": 0}, "policy": {"status": "PASS", "count": 14, "elapsed_seconds": 1.046, "returncode": 0}, "root_rotation": {"status": "PASS", "count": 28, "elapsed_seconds": 1.389, "returncode": 0}, "external_witness": {"status": "PASS", "count": 26, "elapsed_seconds": 1.666, "returncode": 0}, "commit_witness": {"status": "PASS", "count": 24, "elapsed_seconds": 1.376, "returncode": 0}, "all_pass": true, "total": 425}

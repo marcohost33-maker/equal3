@@ -1,0 +1,22 @@
+{
+  "project": "=== / Equal3",
+  "candidate": "0.7.12-research",
+  "as_of": "2026-10-25",
+  "release_decision": "NO_GO",
+  "baseline": "v0.7.11, 240 documented regression tests",
+  "candidate_tests": 250,
+  "regression_failures": 0,
+  "baseline_manifest_checks": 152,
+  "research_fixes": ["authenticated normal read", "version-zero genesis/head binding", "pre-write signed head binding", "legacy witness/guarded read HOLD"],
+  "unsigned_manifest_cannot_attest_source": true,
+  "sqlite_current_runtime": "3.46.1",
+  "sqlite_patched_build_executed": false,
+  "blocking_p0": [
+    "actual patched sqlite binary, provenance, WAL parallel fault tests",
+    "OS-mandatory writer isolation and signed startup policy",
+    "external non-rollbackable anchor and durable commit attestation",
+    "at-rest encryption and key lifecycle",
+    "physical powerloss VFS test rig and independent security review",
+    "privacy/compliance owner authorization where relevant"
+  ]
+}

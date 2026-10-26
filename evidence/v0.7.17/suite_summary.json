@@ -1,0 +1,54 @@
+{
+  "all_pass": true,
+  "tests_passed": 347,
+  "lanes": {
+    "anchor": {
+      "tests": 91,
+      "exit": 0,
+      "duration_seconds": 33.17,
+      "tail": "----------------------------------------------------------------------\nRan 91 tests in 32.435s\n\nOK\n"
+    },
+    "equal": {
+      "tests": 59,
+      "exit": 0,
+      "duration_seconds": 16.5,
+      "tail": "----------------------------------------------------------------------\nRan 59 tests in 15.776s\n\nOK\n"
+    },
+    "store": {
+      "tests": 94,
+      "exit": 0,
+      "duration_seconds": 18.73,
+      "tail": "----------------------------------------------------------------------\nRan 94 tests in 17.672s\n\nOK\n"
+    },
+    "runtime": {
+      "tests": 21,
+      "exit": 0,
+      "duration_seconds": 0.86,
+      "tail": "----------------------------------------------------------------------\nRan 21 tests in 0.019s\n\nOK\n"
+    },
+    "writer": {
+      "tests": 21,
+      "exit": 0,
+      "duration_seconds": 4.26,
+      "tail": "----------------------------------------------------------------------\nRan 21 tests in 3.472s\n\nOK\n"
+    },
+    "coordinator": {
+      "tests": 23,
+      "exit": 0,
+      "duration_seconds": 1.06,
+      "tail": "----------------------------------------------------------------------\nRan 23 tests in 0.335s\n\nOK\n"
+    },
+    "attested": {
+      "tests": 24,
+      "exit": 0,
+      "duration_seconds": 1.32,
+      "tail": "----------------------------------------------------------------------\nRan 24 tests in 0.530s\n\nOK\n"
+    },
+    "policy": {
+      "tests": 14,
+      "exit": 0,
+      "duration_seconds": 0.95,
+      "tail": "----------------------------------------------------------------------\nRan 14 tests in 0.205s\n\nOK\n"
+    }
+  }
+}

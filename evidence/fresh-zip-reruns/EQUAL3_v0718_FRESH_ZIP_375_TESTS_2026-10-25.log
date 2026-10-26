@@ -1,0 +1,19 @@
+START anchor
+anchor {'status': 'PASS', 'count': 91, 'time_s': 35.479, 'returncode': 0}
+START equal
+equal {'status': 'PASS', 'count': 57, 'time_s': 12.404, 'returncode': 0}
+START store
+store {'status': 'PASS', 'count': 96, 'time_s': 20.37, 'returncode': 0}
+START runtime
+runtime {'status': 'PASS', 'count': 21, 'time_s': 0.798, 'returncode': 0}
+START writer
+writer {'status': 'PASS', 'count': 21, 'time_s': 3.82, 'returncode': 0}
+START coordinator
+coordinator {'status': 'PASS', 'count': 23, 'time_s': 1.235, 'returncode': 0}
+START attested
+attested {'status': 'PASS', 'count': 24, 'time_s': 1.403, 'returncode': 0}
+START policy
+policy {'status': 'PASS', 'count': 14, 'time_s': 0.926, 'returncode': 0}
+START root_rotation
+root_rotation {'status': 'PASS', 'count': 28, 'time_s': 1.263, 'returncode': 0}
+SUMMARY {"anchor": {"status": "PASS", "count": 91, "time_s": 35.479, "returncode": 0}, "equal": {"status": "PASS", "count": 57, "time_s": 12.404, "returncode": 0}, "store": {"status": "PASS", "count": 96, "time_s": 20.37, "returncode": 0}, "runtime": {"status": "PASS", "count": 21, "time_s": 0.798, "returncode": 0}, "writer": {"status": "PASS", "count": 21, "time_s": 3.82, "returncode": 0}, "coordinator": {"status": "PASS", "count": 23, "time_s": 1.235, "returncode": 0}, "attested": {"status": "PASS", "count": 24, "time_s": 1.403, "returncode": 0}, "policy": {"status": "PASS", "count": 14, "time_s": 0.926, "returncode": 0}, "root_rotation": {"status": "PASS", "count": 28, "time_s": 1.263, "returncode": 0}, "total": 375, "all_pass": true}

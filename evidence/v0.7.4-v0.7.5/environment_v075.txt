@@ -1,0 +1,4 @@
+Python 3.13.5
+SQLite 3.46.1
+coverage.py 7.13.3
+Local Linux x86_64; synthetic data, no independent anchor

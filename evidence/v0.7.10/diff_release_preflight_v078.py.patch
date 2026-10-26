@@ -1,0 +1,27 @@
+--- v079/release_preflight_v078.py
++++ v0710/release_preflight_v078.py
+@@ -14,6 +14,7 @@
+ import _sqlite3
+ 
+ from anchor_wire import sqlite_wal_reset_safe
++from runtime_evidence_v0710 import runtime_inventory
+ 
+ REQUIRED = (
+     'separately administered and nonrollbackable external monotonic anchor',
+@@ -32,13 +33,15 @@
+         options=[x[0] for x in db.execute('pragma compile_options')]
+     runtime_patched_by_upstream_version=sqlite_wal_reset_safe()
+     return {
+-        'project':'=== / Equal3','candidate_version':'0.7.8-research',
++        'project':'=== / Equal3','candidate_version':'0.7.10-research',
+         'python':platform.python_version(),'sqlite_version':sqlite3.sqlite_version,
+         'sqlite_source_id':source_id, 'sqlite_extension_path':str(binary),
+         'sqlite_extension_sha256':hashlib.sha256(binary.read_bytes()).hexdigest(),
+         'sqlite_compile_options':sorted(options),
+         'upstream_wal_reset_version_policy': 'PASS' if runtime_patched_by_upstream_version else 'FAIL',
+         'runtime_attestation': 'NOT_ATTESTED',
++        'effective_linked_sqlite':runtime_inventory(),
++        'note_extension_digest':'_sqlite3 extension hash is NOT the linked SQLite library fingerprint',
+         'research_unsafe_sqlite_override_accepted':False,
+         'release_verdict':'NO_GO',
+         'blocking_gates':list(REQUIRED),

@@ -1,0 +1,18 @@
+{'round': 1, 'slot': 1, 'variant': 'old', 'sha256_source': '8fb1d5d3c31c0f3df9d3f742848540f8f9b59031ff3b33cd58af102fa716c4be', 'n': 12, 'p50_ms': 1.88712, 'p95_ms': 2.22449}
+{'round': 1, 'slot': 2, 'variant': 'new', 'sha256_source': '0628452d697fb605b02d8686c51483dc62cd0637e3b9d88ff4cbf109a955f3b9', 'n': 12, 'p50_ms': 2.03562, 'p95_ms': 2.41924}
+{'round': 1, 'slot': 3, 'variant': 'new', 'sha256_source': '0628452d697fb605b02d8686c51483dc62cd0637e3b9d88ff4cbf109a955f3b9', 'n': 12, 'p50_ms': 1.8447, 'p95_ms': 2.21543}
+{'round': 1, 'slot': 4, 'variant': 'old', 'sha256_source': '8fb1d5d3c31c0f3df9d3f742848540f8f9b59031ff3b33cd58af102fa716c4be', 'n': 12, 'p50_ms': 2.19421, 'p95_ms': 4.84067}
+{'round': 2, 'slot': 1, 'variant': 'new', 'sha256_source': '0628452d697fb605b02d8686c51483dc62cd0637e3b9d88ff4cbf109a955f3b9', 'n': 12, 'p50_ms': 2.12019, 'p95_ms': 2.4052}
+{'round': 2, 'slot': 2, 'variant': 'old', 'sha256_source': '8fb1d5d3c31c0f3df9d3f742848540f8f9b59031ff3b33cd58af102fa716c4be', 'n': 12, 'p50_ms': 1.77858, 'p95_ms': 2.23313}
+{'round': 2, 'slot': 3, 'variant': 'old', 'sha256_source': '8fb1d5d3c31c0f3df9d3f742848540f8f9b59031ff3b33cd58af102fa716c4be', 'n': 12, 'p50_ms': 2.04755, 'p95_ms': 2.31058}
+{'round': 2, 'slot': 4, 'variant': 'new', 'sha256_source': '0628452d697fb605b02d8686c51483dc62cd0637e3b9d88ff4cbf109a955f3b9', 'n': 12, 'p50_ms': 1.86298, 'p95_ms': 2.13199}
+{'round': 3, 'slot': 1, 'variant': 'old', 'sha256_source': '8fb1d5d3c31c0f3df9d3f742848540f8f9b59031ff3b33cd58af102fa716c4be', 'n': 12, 'p50_ms': 1.87129, 'p95_ms': 2.14266}
+{'round': 3, 'slot': 2, 'variant': 'new', 'sha256_source': '0628452d697fb605b02d8686c51483dc62cd0637e3b9d88ff4cbf109a955f3b9', 'n': 12, 'p50_ms': 1.99624, 'p95_ms': 2.56033}
+{'round': 3, 'slot': 3, 'variant': 'new', 'sha256_source': '0628452d697fb605b02d8686c51483dc62cd0637e3b9d88ff4cbf109a955f3b9', 'n': 12, 'p50_ms': 2.12457, 'p95_ms': 2.41027}
+{'round': 3, 'slot': 4, 'variant': 'old', 'sha256_source': '8fb1d5d3c31c0f3df9d3f742848540f8f9b59031ff3b33cd58af102fa716c4be', 'n': 12, 'p50_ms': 1.94107, 'p95_ms': 2.40863}
+{'round': 4, 'slot': 1, 'variant': 'new', 'sha256_source': '0628452d697fb605b02d8686c51483dc62cd0637e3b9d88ff4cbf109a955f3b9', 'n': 12, 'p50_ms': 1.83891, 'p95_ms': 2.01639}
+{'round': 4, 'slot': 2, 'variant': 'old', 'sha256_source': '8fb1d5d3c31c0f3df9d3f742848540f8f9b59031ff3b33cd58af102fa716c4be', 'n': 12, 'p50_ms': 1.74606, 'p95_ms': 2.03058}
+{'round': 4, 'slot': 3, 'variant': 'old', 'sha256_source': '8fb1d5d3c31c0f3df9d3f742848540f8f9b59031ff3b33cd58af102fa716c4be', 'n': 12, 'p50_ms': 1.99995, 'p95_ms': 2.4098}
+{'round': 4, 'slot': 4, 'variant': 'new', 'sha256_source': '0628452d697fb605b02d8686c51483dc62cd0637e3b9d88ff4cbf109a955f3b9', 'n': 12, 'p50_ms': 1.90613, 'p95_ms': 2.21419}
+old median_of_run_medians 1.9141
+new median_of_run_medians 1.95119

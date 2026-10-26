@@ -1,0 +1,10 @@
+{
+  "tested_full_suite_lanes": 7,
+  "test_count": 333,
+  "all_statuses": "PASS",
+  "resource_warning_as_error": true,
+  "decision": "NO_GO",
+  "real_independent_anchor": false,
+  "real_attester_service": false,
+  "sqlite_upgrade_executed": false
+}

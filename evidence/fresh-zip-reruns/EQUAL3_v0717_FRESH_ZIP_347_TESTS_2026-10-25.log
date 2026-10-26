@@ -1,0 +1,17 @@
+START anchor
+END anchor 91 0
+START equal
+END equal 59 0
+START store
+END store 94 0
+START runtime
+END runtime 21 0
+START writer
+END writer 21 0
+START coordinator
+END coordinator 23 0
+START attested
+END attested 24 0
+START policy
+END policy 14 0
+RESULT 347 True

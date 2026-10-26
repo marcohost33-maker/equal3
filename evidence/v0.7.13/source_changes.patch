@@ -1,0 +1,176 @@
+--- v0712/state_store.py
++++ v0713/state_store.py
+@@ -26,6 +26,42 @@
+ DERIVE_DOMAIN = b'EQ3-PROPOSAL-KEY-V06\x00'
+ KEY_CHECK_DOMAIN = b'EQ3-STORE-KEY-CHECK-V06\x00'
+ CHAIN_DOMAIN = b'EQ3-RECEIPT-CHAIN-V074\x00'
++
++# DELETE/EXTRA is a narrow WAL-reset mitigation, not an independently approved runtime.
++VALID_JOURNAL_MODES = frozenset(('WAL', 'DELETE'))
++
++def _journal_policy(mode):
++    if type(mode) is not str or mode not in VALID_JOURNAL_MODES:
++        raise StoreError('journal policy must be WAL or DELETE')
++    return mode
++
++def _rollback_file_preflight(path):
++    """Reject WAL-mode database before an SQLite connection might recover it.
++
++    Conservative fail-closed check on a trusted owner-controlled directory.
++    For hostile same-UID filesystem access use OS-isolated writer instead.
++    """
++    p = Path(path).absolute()
++    if p.is_symlink():
++        raise StoreError('rollback store must not be a symlink')
++    for suffix in ('-wal', '-shm'):
++        if Path(str(p) + suffix).exists() or Path(str(p) + suffix).is_symlink():
++            raise StoreError('WAL sidecar present; explicit offline migration required')
++    flags = os.O_RDONLY | getattr(os, 'O_CLOEXEC', 0)
++    if not hasattr(os, 'O_NOFOLLOW'):
++        raise StoreError('rollback preflight requires O_NOFOLLOW')
++    fd = os.open(p, flags | os.O_NOFOLLOW)
++    try:
++        st = os.fstat(fd)
++        import stat
++        if not stat.S_ISREG(st.st_mode) or st.st_size < 100:
++            raise StoreError('invalid rollback database file')
++        hdr = os.read(fd, 100)
++        if (hdr[:16] != b'SQLite format 3\x00' or hdr[18:20] != b'\x01\x01'):
++            raise StoreError('not a DELETE-journal database; explicit migration required')
++    finally:
++        os.close(fd)
++
+ 
+ class StoreError(ValueError): pass
+ class AuthenticationError(StoreError): pass
+@@ -151,11 +187,14 @@
+     """Trusted local paths, SQLite WAL+FULL, single-current-state, monotonic version.
+     The database is the transaction boundary; no external blob files or torn manifest.
+     """
+-    def __init__(self, path, *, key):
++    def __init__(self, path, *, key, journal_mode='WAL'):
++        self.journal_mode = _journal_policy(journal_mode)
+         self.path = Path(path).absolute()
+         self.key = _check_key(key)
+         if not self.path.is_file():
+             raise StoreError('store not found; explicit create required')
++        if self.journal_mode == 'DELETE':
++            _rollback_file_preflight(self.path)
+         with closing(self._db()) as db:
+             self._verify_schema(db)
+             sid,check = db.execute('SELECT store_id,key_check FROM meta WHERE id=1').fetchone()
+@@ -163,9 +202,10 @@
+                 raise AuthenticationError('incorrect store key')
+ 
+     @classmethod
+-    def create(cls, path, *, key, initial: bytes):
++    def create(cls, path, *, key, initial: bytes, journal_mode='WAL'):
+         p = Path(path).absolute()
+         _check_key(key)
++        journal_mode = _journal_policy(journal_mode)
+         if not isinstance(initial, bytes) or len(initial) > MAX_STORED_STATE:
+             raise StoreError('initial state outside 8 MiB limit')
+         if p.exists():
+@@ -175,9 +215,11 @@
+         os.close(fd)
+         try:
+             with closing(_connect(p, create=True)) as db:
+-                mode = db.execute('PRAGMA journal_mode=WAL').fetchone()[0]
+-                if mode.lower() != 'wal':
+-                    raise StoreError('WAL unavailable')
++                mode = db.execute('PRAGMA journal_mode=' + journal_mode).fetchone()[0]
++                if mode.upper() != journal_mode:
++                    raise StoreError('requested journal mode unavailable')
++                if journal_mode == 'DELETE':
++                    db.execute('PRAGMA synchronous=EXTRA')
+                 db.execute('PRAGMA foreign_keys=ON')
+                 db.execute('BEGIN IMMEDIATE')
+                 db.execute('CREATE TABLE meta (id INTEGER PRIMARY KEY CHECK(id=1), schema_version INTEGER NOT NULL, store_id BLOB NOT NULL, key_check BLOB NOT NULL, genesis_digest BLOB)')
+@@ -195,20 +237,26 @@
+                 try: Path(str(p)+suffix).unlink()
+                 except FileNotFoundError: pass
+             raise
+-        return cls(p, key=key)
++        return cls(p, key=key, journal_mode=journal_mode)
+ 
+     def _db(self):
++        if self.journal_mode == 'DELETE':
++            _rollback_file_preflight(self.path)
+         db = _connect(self.path)
+-        db.execute('PRAGMA foreign_keys=ON')
+-        mode = db.execute('PRAGMA journal_mode').fetchone()[0]
+-        if mode.lower() != 'wal':
++        try:
++            db.execute('PRAGMA foreign_keys=ON')
++            mode = db.execute('PRAGMA journal_mode').fetchone()[0]
++            if mode.upper() != self.journal_mode:
++                raise StoreError('journal policy drift; explicit migration required')
++            if self.journal_mode == 'DELETE':
++                db.execute('PRAGMA synchronous=EXTRA')
++            sync = db.execute('PRAGMA synchronous').fetchone()[0]
++            if sync != (3 if self.journal_mode == 'DELETE' else 2):
++                raise StoreError('required synchronous durability unavailable')
++            return db
++        except BaseException:
+             db.close()
+-            raise StoreError('WAL unexpectedly disabled')
+-        sync = db.execute('PRAGMA synchronous').fetchone()[0]
+-        if sync != 2:
+-            db.close()
+-            raise StoreError('FULL synchronous required')
+-        return db
++            raise
+ 
+     @staticmethod
+     def _verify_schema(db):
+@@ -357,6 +405,8 @@
+         A busy TRUNCATE does not mean corruption. Do not run TRUNCATE under
+         continuous readers without explicit maintenance policy.
+         """
++        if self.journal_mode == 'DELETE':
++            raise StoreError('WAL checkpoint unavailable for DELETE-journal store')
+         if mode not in ('PASSIVE','FULL','RESTART','TRUNCATE','NOOP'):
+             raise StoreError('unsupported checkpoint mode')
+         if not isinstance(busy_timeout_ms,int) or not 0<=busy_timeout_ms<=60000:
+@@ -401,11 +451,13 @@
+                     source.backup(target, pages=64, sleep=0.01)
+                     if fault: fault('after_sqlite_backup')
+                     # Ensure that target's on-disk mode will be accepted by StateStore.
+-                    mode = target.execute('PRAGMA journal_mode=WAL').fetchone()[0]
+-                    if mode.lower() != 'wal':
+-                        raise IntegrityError('backup could not enter WAL mode')
++                    mode = target.execute('PRAGMA journal_mode=' + self.journal_mode).fetchone()[0]
++                    if mode.upper() != self.journal_mode:
++                        raise IntegrityError('backup journal policy not retained')
++                    if self.journal_mode == 'DELETE':
++                        target.execute('PRAGMA synchronous=EXTRA')
+             # Verification uses independent connections after copy/close.
+-            backed = StateStore(temp_path,key=self.key)
++            backed = StateStore(temp_path,key=self.key,journal_mode=self.journal_mode)
+             report = backed.verify()
+             if fault: fault('after_validation')
+             # Do not publish a standalone DB file when associated WAL contents remain.
+--- v0712/store_cli.py
++++ v0713/store_cli.py
+@@ -50,6 +50,9 @@
+     cp=sub.add_parser('checkpoint');cp.add_argument('database');cp.add_argument('--key-file',required=True)
+     cp.add_argument('--mode',choices=['PASSIVE','FULL','RESTART','TRUNCATE','NOOP'],default='PASSIVE')
+     cp.add_argument('--timeout-ms',type=int,default=1000)
++    # Explicit opt-in; no silent conversion of existing WAL databases.
++    for command in (init,*[sub.choices[k] for k in ('status','verify','propose','apply','receipt','export','backup','checkpoint')]):
++        command.add_argument('--journal-mode', choices=('WAL','DELETE'), default='WAL')
+     args=ap.parse_args(argv)
+     try:
+         if args.command=='keygen':
+@@ -60,9 +63,9 @@
+         key=_key_read(args.key_file)
+         if args.command=='init':
+             initial=_bounded_file(args.initial,MAX_STORED_STATE)
+-            store=StateStore.create(args.database,key=key,initial=initial)
++            store=StateStore.create(args.database,key=key,initial=initial,journal_mode=args.journal_mode)
+             _output({'created':True,'store_id':store.store_id.hex(),'version':0});return 0
+-        store=StateStore(args.database,key=key)
++        store=StateStore(args.database,key=key,journal_mode=args.journal_mode)
+         if args.command=='status':
+             snap=store.read()
+             _output({'version':snap.version,'bytes':len(snap.value),'digest':snap.digest.hex(),'store_id':store.store_id.hex()})

@@ -1,0 +1,8 @@
+{
+  "baseline_v0715_with_valid_reviewer_hmac_but_no_db_commit": "FINALIZE accepted by raw persistent authority, DB remains v0",
+  "v0716_evidence_required_no_observation": "Reviewer token alone rejected; hold",
+  "v0716_invalid_attester_or_deployment": "Reject; no anchor advance",
+  "v0716_valid_signed_commit_or_abort": "Conditionally accepted by reference observer and authority",
+  "remaining_counterexample": "Local DB rollback after signed observation can leave anchor one version ahead; subsequent diagnose=ROLLBACK_HOLD",
+  "warning": "Witness keys, signer and data are not independently hosted or hardware protected."
+}

@@ -1,0 +1,9 @@
+{
+  "python": "3.13.5",
+  "sqlite": "3.46.1",
+  "platform": "Linux-6.18.55-x86_64-with-glibc2.41",
+  "research_override_used": true,
+  "full_tests": 176,
+  "focused_tests": 37,
+  "owner_release": "NO_GO"
+}

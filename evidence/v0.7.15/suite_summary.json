@@ -1,0 +1,38 @@
+{
+  "anchor": {
+    "tests": 91,
+    "status": "PASS",
+    "returncode": 0,
+    "seconds": 34.519
+  },
+  "equal": {
+    "tests": 57,
+    "status": "PASS",
+    "returncode": 0,
+    "seconds": 13.644
+  },
+  "store": {
+    "tests": 96,
+    "status": "PASS",
+    "returncode": 0,
+    "seconds": 22.168
+  },
+  "runtime": {
+    "tests": 21,
+    "status": "PASS",
+    "returncode": 0,
+    "seconds": 0.905
+  },
+  "protected_writer": {
+    "tests": 21,
+    "status": "PASS",
+    "returncode": 0,
+    "seconds": 3.801
+  },
+  "new_coordinated_writer": {
+    "tests": 23,
+    "status": "PASS",
+    "returncode": 0,
+    "seconds": 1.076
+  }
+}

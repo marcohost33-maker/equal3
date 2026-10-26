@@ -1,0 +1,4 @@
+v076 1 [{'cycle': 1, 'version': 'v076', 'method': 'prepare_plus_finalize', 'n': 60, 'p50_ms': 3.42341, 'p95_ms': 6.90243}, {'cycle': 1, 'version': 'v076', 'method': 'status', 'n': 60, 'p50_ms': 0.29912, 'p95_ms': 0.44725}]
+v077 2 [{'cycle': 2, 'version': 'v077', 'method': 'prepare_plus_finalize', 'n': 60, 'p50_ms': 3.42825, 'p95_ms': 9.35033}, {'cycle': 2, 'version': 'v077', 'method': 'status', 'n': 60, 'p50_ms': 0.33723, 'p95_ms': 0.50798}]
+v077 3 [{'cycle': 3, 'version': 'v077', 'method': 'prepare_plus_finalize', 'n': 60, 'p50_ms': 5.51023, 'p95_ms': 11.73078}, {'cycle': 3, 'version': 'v077', 'method': 'status', 'n': 60, 'p50_ms': 0.40174, 'p95_ms': 0.60263}]
+v076 4 [{'cycle': 4, 'version': 'v076', 'method': 'prepare_plus_finalize', 'n': 60, 'p50_ms': 6.33086, 'p95_ms': 19.37195}, {'cycle': 4, 'version': 'v076', 'method': 'status', 'n': 60, 'p50_ms': 0.42511, 'p95_ms': 0.65746}]

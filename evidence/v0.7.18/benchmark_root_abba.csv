@@ -1,0 +1,9 @@
+round,variant,source,sha256,median_ms,p95_ms,count
+1,baseline,/mnt/data/equal3_v0717_review/Equal3_v0717_Research/commit_evidence_v0716.py,30fb08bf79cf27fac6dfb5f8a5fb839dfe3b68845814dfa91d3bd415c9dd3dc0,0.1937315,0.326362,400
+1,candidate,/mnt/data/equal3_v0718_work/Equal3_v0717_Research/trust_rotation_v0718.py,de86f359eedc9bc9626dddc2f42fd6183ed54b0c9574966223974d56cf22a69e,0.2688415,0.493689,400
+2,candidate,/mnt/data/equal3_v0718_work/Equal3_v0717_Research/trust_rotation_v0718.py,de86f359eedc9bc9626dddc2f42fd6183ed54b0c9574966223974d56cf22a69e,0.239153,0.36516,400
+2,baseline,/mnt/data/equal3_v0717_review/Equal3_v0717_Research/commit_evidence_v0716.py,30fb08bf79cf27fac6dfb5f8a5fb839dfe3b68845814dfa91d3bd415c9dd3dc0,0.3090965,4.432565,400
+3,candidate,/mnt/data/equal3_v0718_work/Equal3_v0717_Research/trust_rotation_v0718.py,de86f359eedc9bc9626dddc2f42fd6183ed54b0c9574966223974d56cf22a69e,0.3661855,0.486087,400
+3,baseline,/mnt/data/equal3_v0717_review/Equal3_v0717_Research/commit_evidence_v0716.py,30fb08bf79cf27fac6dfb5f8a5fb839dfe3b68845814dfa91d3bd415c9dd3dc0,0.328325,0.377698,400
+4,baseline,/mnt/data/equal3_v0717_review/Equal3_v0717_Research/commit_evidence_v0716.py,30fb08bf79cf27fac6dfb5f8a5fb839dfe3b68845814dfa91d3bd415c9dd3dc0,0.202729,0.537343,400
+4,candidate,/mnt/data/equal3_v0718_work/Equal3_v0717_Research/trust_rotation_v0718.py,de86f359eedc9bc9626dddc2f42fd6183ed54b0c9574966223974d56cf22a69e,0.277895,0.344458,400

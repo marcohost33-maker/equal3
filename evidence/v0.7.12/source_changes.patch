@@ -1,0 +1,119 @@
+--- v0711/state_store.py
++++ v0712/state_store.py
+@@ -241,14 +241,16 @@
+             return db.execute('SELECT store_id FROM meta WHERE id=1').fetchone()[0]
+ 
+     def read(self):
+-        with closing(self._db()) as db:
+-            row = db.execute('SELECT version,value,digest FROM head WHERE id=1').fetchone()
+-            if row is None:
+-                raise IntegrityError('no head')
+-            version, value, digest = row
+-            if len(value)>MAX_STORED_STATE or not hmac.compare_digest(_digest(value), digest):
+-                raise IntegrityError('corrupt head value')
+-            return Snapshot(version, value, digest)
++        """Authenticated coherent snapshot; never trust a bare head SHA-256.
++
++        Full historical HMAC-chain validation is intentionally O(N), pending
++        an independently attested checkpoint design. Legacy v1 is not allowed
++        to assert the authenticity of a read.
++        """
++        report, snap = self.read_verified()
++        if report['receipt_auth'] != 'HMAC_CHAIN_V2':
++            raise IntegrityError('legacy unsealed head cannot authorize a read')
++        return snap
+ 
+     def receipt(self, request_id:bytes):
+         if not isinstance(request_id,bytes) or len(request_id)!=16:
+@@ -316,6 +318,11 @@
+                     raise IntegrityError('receipt/version length differs')
+                 if version and not hmac.compare_digest(last_digest,digest):
+                     raise IntegrityError('last receipt digest mismatch')
++                # At version zero there is no last receipt. The genesis digest
++                # is the ONLY authenticated commitment to the original value.
++                # A matching SHA-256(value) alone is not authentication.
++                if schema_version == 2 and version == 0 and not hmac.compare_digest(genesis, digest):
++                    raise IntegrityError('head does not match authenticated genesis')
+                 if schema_version == 2:
+                     auth_count=db.execute('SELECT COUNT(*) FROM receipt_auth').fetchone()[0]
+                     if auth_count != version + 1:
+@@ -498,6 +505,26 @@
+             actual = db.execute('SELECT version,digest FROM head WHERE id=1').fetchone()
+             if actual is None or actual[0] != version or not hmac.compare_digest(actual[1], digest):
+                 raise ConflictError('state advanced or changed after preflight')
++            # An authenticated base is mandatory even for a freshly created
++            # store. Otherwise an offline edit to BOTH value and SHA-256 digest
++            # could be accepted as the legitimate genesis when applying.
++            schema_row = db.execute('SELECT schema_version,genesis_digest,store_id,key_check FROM meta WHERE id=1').fetchone()
++            if schema_row is None or schema_row[0] != 2:
++                raise IntegrityError('unsealed schema cannot authorize write')
++            _, genesis_digest, chain_sid, chain_key_tag = schema_row
++            if not hmac.compare_digest(_key_check(self.key,chain_sid),chain_key_tag):
++                raise AuthenticationError('store key binding changed')
++            genesis_auth=db.execute('SELECT tag FROM receipt_auth WHERE committed_version=0').fetchone()
++            if (not genesis_auth or not isinstance(genesis_auth[0],bytes) or
++                not hmac.compare_digest(genesis_auth[0],_chain_genesis(self.key,chain_sid,genesis_digest))):
++                raise IntegrityError('genesis authentication failed before write')
++            if version == 0:
++                if not hmac.compare_digest(digest,genesis_digest):
++                    raise IntegrityError('head does not match authenticated genesis before write')
++            else:
++                tail=db.execute('SELECT digest FROM receipts WHERE committed_version=?',(version,)).fetchone()
++                if not tail or not isinstance(tail[0],bytes) or not hmac.compare_digest(tail[0],digest):
++                    raise IntegrityError('head differs from last receipt before write')
+             updated=db.execute('UPDATE head SET version=?,value=?,digest=? WHERE id=1 AND version=? AND digest=?',
+                                (version+1,target,target_digest,version,digest))
+             if updated.rowcount != 1:
+--- v0711/witness.py
++++ v0712/witness.py
+@@ -77,6 +77,8 @@
+     # Important: store.verify() obtains one consistent SQLite read transaction;
+     # separate read() / store_id calls can observe different committed versions.
+     audit=store.verify()
++    if audit.get('receipt_auth') != 'HMAC_CHAIN_V2':
++        raise WitnessError('legacy unsealed history cannot establish authenticated checkpoint')
+     return Checkpoint(audit['store_id'],audit['version'],audit['digest_sha256'])
+ 
+ def _compare_checkpoint(c, w):
+--- v0711/guarded_store.py
++++ v0712/guarded_store.py
+@@ -60,6 +60,8 @@
+         _path_preflight(self.path)
+         def work():
+             audit, snap = self.store.read_verified()
++            if audit.get('receipt_auth') != 'HMAC_CHAIN_V2':
++                raise witness.WitnessError('legacy unsealed history cannot authorize guarded read')
+             local = witness.Checkpoint(audit['store_id'],audit['version'],audit['digest_sha256'])
+             anchor = witness.read_witness(self.path,self.key)
+             witness._compare_checkpoint(local,anchor)
+--- v0711/test_anchor_protocol.py
++++ v0712/test_anchor_protocol.py
+@@ -91,7 +91,8 @@
+     def test_same_version_fork_detected(self):
+         with closing(sqlite3.connect(self.path)) as db, db:
+             db.execute('UPDATE head SET value=?, digest=? WHERE id=1',(b'fraud',hashlib.sha256(b'fraud').digest()))
+-        self.assertEqual(self.client.diagnose().code,'DIVERGENCE_HOLD')
++        # Authenticated genesis now fails before anchor comparison.
++        self.assertEqual(self.client.diagnose().code,'INVALID_DB_HOLD')
+ 
+     def test_joint_db_rollback_after_anchor_advance_detected(self):
+         self.client.apply(self.proposal(b'one'))
+--- v0711/test_v074_hardening.py
++++ v0712/test_v074_hardening.py
+@@ -49,11 +49,14 @@
+ 
+     def test_raw_apply_refuses_corrupt_chain_tail(self):
+         self.update(b'A')
++        proposal,_=prepare_update(self.store,b'B')
+         with closing(sqlite3.connect(self.path)) as db, db:
+             db.execute('UPDATE receipt_auth SET tag=? WHERE committed_version=1',(b'X'*32,))
+-        proposal,_=prepare_update(self.store,b'B')
+         with self.assertRaises(IntegrityError):self.store.apply(proposal)
+-        self.assertEqual(self.store.read().version,1)
++        # A corrupted chain must now also block raw reads, not just writes.
++        with self.assertRaises(IntegrityError):self.store.read()
++        with closing(sqlite3.connect(self.path)) as db:
++            self.assertEqual(db.execute('SELECT version FROM head').fetchone()[0],1)
+ 
+     def test_tampered_chain_tag_is_detected(self):
+         self.update(b'A')

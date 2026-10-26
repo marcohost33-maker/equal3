@@ -1,0 +1,690 @@
+--- /dev/null
++++ b/external_commit_witness_v0720.py
++"""Equal3 v0.7.20 research: separately signed monotone COMMIT position witness.
++
++A witness signs current checkpoint challenges and accepts only sequential attester-signed
++commit observations. It DOES NOT prove the observer really saw stable storage, or
++prevent rollback of its own database. A shared local host is not an independent trust
++boundary. Never issue attester observations from untrusted writers.
++"""
++from __future__ import annotations
++
++import hashlib
++import hmac
++import os
++import secrets
++import time
++import socket
++import socketserver
++import sqlite3
++import stat
++import threading
++from contextlib import closing
++from pathlib import Path
++
++from cryptography.exceptions import InvalidSignature
++from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
++
++from anchor_protocol import AnchorHold, ReviewDenied, Intent, Position, CoordinatedStore
++from anchor_wire import unique_json, from_intent, validate_position, _verify_delete_header
++from commit_evidence_v0716 import _canonical, _intent_hash, DEPLOY
++from trust_rotation_v0718 import fingerprint
++from anchored_writer_v0715 import AnchoredWriterCore
++
++PROTOCOL='Equal3-commit-witness-v0720'
++SIGN_DOMAIN=b'Equal3/commit-witness/challenge/v0720\x00'
++OBS_DOMAIN=b'Equal3/commit-witness/postfinal-observation/v0720\x00'
++SEAL_DOMAIN=b'Equal3/commit-witness/seal/v0720\x00'
++MAX_FRAME=16384
++
++
++def _hex(x,n):
++    if type(x) is not str or len(x)!=n or any(c not in '0123456789abcdef' for c in x):
++        raise ValueError('invalid canonical hexadecimal field')
++    return x
++
++
++def _record(*,deployment_id,store_id,version,digest,attester_fingerprint,signer_fingerprint,request_id):
++    if type(deployment_id) is not str or DEPLOY.fullmatch(deployment_id) is None:
++        raise ValueError('invalid deployment id')
++    _hex(store_id,32);_hex(digest,64);_hex(attester_fingerprint,64);_hex(signer_fingerprint,64)
++    if type(version) is not int or version<0 or version>=2**63:raise ValueError('invalid version')
++    if version==0:
++        if request_id is not None:raise ValueError('genesis must not have request id')
++    else:_hex(request_id,32)
++    return dict(protocol=PROTOCOL,deployment_id=deployment_id,store_id=store_id,
++                version=version,digest=digest,attester_fingerprint=attester_fingerprint,
++                signer_fingerprint=signer_fingerprint,request_id=request_id)
++
++
++def _seal(key,record):return hmac.new(key,SEAL_DOMAIN+_canonical(record),hashlib.sha256).digest()
++
++
++def issue_final_checkpoint(*,store,anchor,intent:Intent,signing_key:Ed25519PrivateKey,
++                           deployment_id:str,now=None,lifetime_seconds=30):
++    """REFERENCE ONLY: observer must run in independent identity with read-only access.
++
++    Sign only after final anchor decision and authenticated DB read. This is a
++    point-in-time assertion, NOT an atomic distributed commit or anti-TOCTOU proof.
++    """
++    from anchor_wire import validate_intent
++    validate_intent(intent)
++    if not isinstance(signing_key,Ed25519PrivateKey):raise TypeError('independent observer private key required')
++    if type(deployment_id) is not str or DEPLOY.fullmatch(deployment_id) is None:
++        raise ValueError('noncanonical deployment')
++    if type(lifetime_seconds) is not int or not 1<=lifetime_seconds<=60:
++        raise ValueError('invalid checkpoint lifetime')
++    remote=anchor.status()
++    if remote.pending is not None or remote.committed != Position(intent.store_id,intent.version,intent.digest):
++        raise ReviewDenied('final anchor commit not independently observed')
++    if store.journal_mode != 'DELETE':raise ReviewDenied('observer requires DELETE/EXTRA StateStore')
++    info,snap=store.inspect_request(bytes.fromhex(intent.request_id))
++    receipt=info.get('request')
++    if (info.get('receipt_auth')!='HMAC_CHAIN_V2' or info.get('store_id')!=intent.store_id or
++        snap.version!=intent.version or snap.digest.hex()!=intent.digest or
++        type(receipt) is not dict or receipt.get('request_id')!=intent.request_id or
++        receipt.get('base_version')!=intent.base_version or receipt.get('version')!=intent.version or
++        receipt.get('proposal_hash')!=intent.proposal_hash or receipt.get('digest_sha256')!=intent.digest):
++        raise ReviewDenied('authenticated post-finalization state does not match intent')
++    if now is None:now=int(time.time())
++    if type(now) is not int or now<0 or now>=2**63-61:raise ValueError('invalid observer time')
++    stmt={'protocol':'Equal3-final-checkpoint-v0720', 'deployment_id':deployment_id,
++          'observation_id':secrets.token_hex(16),'intent_sha256':_intent_hash(intent),
++          'store_id':intent.store_id,'version':intent.version,'digest':intent.digest,
++          'request_id':intent.request_id,'issued_unix':now,'expires_unix':now+lifetime_seconds}
++    return {'statement':stmt,'signature':signing_key.sign(OBS_DOMAIN+_canonical(stmt)).hex()}
++
++
++def verify_final_checkpoint(evidence,*,intent:Intent,public_key:Ed25519PublicKey,deployment_id:str,now=None):
++    if not isinstance(public_key,Ed25519PublicKey):raise ReviewDenied('untrusted observer key')
++    if type(evidence) is not dict or set(evidence)!={'statement','signature'}:
++        raise ReviewDenied('postfinal observation required')
++    stmt=evidence['statement'];signature=evidence['signature']
++    expected_fields={'protocol','deployment_id','observation_id','intent_sha256','store_id',
++                     'version','digest','request_id','issued_unix','expires_unix'}
++    if type(stmt) is not dict or set(stmt)!=expected_fields or type(signature) is not str:
++        raise ReviewDenied('malformed postfinal observation')
++    try:
++        _hex(signature,128);_hex(stmt['observation_id'],32)
++        if (stmt['protocol']!='Equal3-final-checkpoint-v0720' or stmt['deployment_id']!=deployment_id or
++            stmt['intent_sha256']!=_intent_hash(intent) or stmt['store_id']!=intent.store_id or
++            type(stmt['version']) is not int or stmt['version']!=intent.version or
++            stmt['digest']!=intent.digest or stmt['request_id']!=intent.request_id):
++            raise ValueError('postfinal checkpoint identity mismatch')
++        start,end=stmt['issued_unix'],stmt['expires_unix']
++        if type(start) is not int or type(end) is not int or start<0 or not 1<=end-start<=60:
++            raise ValueError('invalid checkpoint lifetime')
++        if now is None:now=int(time.time())
++        if type(now) is not int or not start<=now<=end:raise ValueError('stale postfinal checkpoint')
++        public_key.verify(bytes.fromhex(signature),OBS_DOMAIN+_canonical(stmt))
++    except (ValueError,TypeError,KeyError,InvalidSignature) as exc:
++        raise ReviewDenied('invalid final commit checkpoint evidence') from exc
++
++
++
++class CommitWitnessLedger:
++    """Append-only CAS head protected by a witness-only seal key; local research."""
++    def __init__(self,path,*,signing_key,attester_public_key,seal_key,deployment_id):
++        if not isinstance(signing_key,Ed25519PrivateKey) or not isinstance(attester_public_key,Ed25519PublicKey):
++            raise TypeError('separate witness signing and attester verifying keys required')
++        if fingerprint(signing_key.public_key())==fingerprint(attester_public_key):
++            raise ValueError('witness cannot share attester signing identity')
++        if type(seal_key) is not bytes or len(seal_key)<32:raise ValueError('witness-only seal key required')
++        self.path=Path(path).absolute();self.signing_key=signing_key
++        self.attester_public_key=attester_public_key;self.seal_key=seal_key
++        self.deployment_id=deployment_id;self.lock=threading.RLock()
++        with closing(self._db()) as db:
++            db.execute('BEGIN')
++            try:self._load(db);db.commit()
++            except BaseException:db.rollback();raise
++
++    @classmethod
++    def bootstrap(cls,path,genesis:Position,*,signing_key,attester_public_key,seal_key,deployment_id):
++        validate_position(genesis,genesis=True)
++        p=Path(path).absolute()
++        s=p.parent.lstat()
++        if not stat.S_ISDIR(s.st_mode) or s.st_uid!=os.geteuid() or stat.S_IMODE(s.st_mode)!=0o700:
++            raise PermissionError('witness directory must be private, owned and mode 0700')
++        if p.exists():raise FileExistsError('witness already exists')
++        record=_record(deployment_id=deployment_id,store_id=genesis.store_id,version=0,
++                       digest=genesis.digest,attester_fingerprint=fingerprint(attester_public_key),
++                       signer_fingerprint=fingerprint(signing_key.public_key()),request_id=None)
++        flags=os.O_CREAT|os.O_EXCL|os.O_RDWR|getattr(os,'O_NOFOLLOW',0)
++        fd=os.open(p,flags,0o600);os.close(fd)
++        try:
++            with closing(sqlite3.connect(p)) as db:
++                db.execute('PRAGMA journal_mode=DELETE');db.execute('PRAGMA synchronous=EXTRA')
++                db.execute('PRAGMA trusted_schema=OFF')
++                db.execute('CREATE TABLE commit_floor(id INTEGER PRIMARY KEY CHECK(id=1),body BLOB NOT NULL,seal BLOB NOT NULL)')
++                db.execute('INSERT INTO commit_floor VALUES(1,?,?)',(_canonical(record),_seal(seal_key,record)))
++                db.commit()
++        except BaseException:
++            # No silent recreation of potentially ambiguous or partial database.
++            raise
++        return cls(p,signing_key=signing_key,attester_public_key=attester_public_key,
++                   seal_key=seal_key,deployment_id=deployment_id)
++
++    def _db(self):
++        s=self.path.lstat();parent=self.path.parent.lstat()
++        if (not stat.S_ISREG(s.st_mode) or s.st_uid!=os.geteuid() or
++            stat.S_IMODE(s.st_mode)!=0o600 or s.st_nlink!=1 or
++            not stat.S_ISDIR(parent.st_mode) or parent.st_uid!=os.geteuid() or
++            stat.S_IMODE(parent.st_mode)!=0o700):raise AnchorHold('witness filesystem boundary violated')
++        _verify_delete_header(self.path)
++        from urllib.parse import quote
++        db=sqlite3.connect('file:'+quote(str(self.path),safe='/')+'?mode=rw',uri=True,timeout=3,isolation_level=None)
++        try:
++            db.execute('PRAGMA trusted_schema=OFF');db.execute('PRAGMA synchronous=EXTRA')
++            if db.execute('PRAGMA journal_mode').fetchone()[0].lower()!='delete':raise AnchorHold('witness journal changed')
++            if db.execute('PRAGMA synchronous').fetchone()[0]!=3:raise AnchorHold('witness sync downgraded')
++        except BaseException:db.close();raise
++        return db
++
++    def _load(self,db):
++        try:rows=db.execute('SELECT id,body,seal FROM commit_floor LIMIT 2').fetchall()
++        except sqlite3.DatabaseError as exc:raise AnchorHold('missing witness schema') from exc
++        if len(rows)!=1 or rows[0][0]!=1:raise AnchorHold('malformed commit witness cardinality')
++        _,raw,seal=rows[0]
++        if type(raw) is not bytes or type(seal) is not bytes or len(seal)!=32:
++            raise AnchorHold('malformed witness seal')
++        try:
++            item=unique_json(raw)
++            if type(item) is not dict or set(item)!=set(_record(deployment_id='d',store_id='a'*32,version=0,digest='a'*64,attester_fingerprint='a'*64,signer_fingerprint='a'*64,request_id=None)):
++                raise ValueError('invalid witness fields')
++            canonical=_record(**{k:v for k,v in item.items() if k!='protocol'})
++            if item!=canonical or raw!=_canonical(canonical):raise ValueError('noncanonical witness row')
++            if (item['deployment_id']!=self.deployment_id or item['attester_fingerprint']!=fingerprint(self.attester_public_key) or
++                item['signer_fingerprint']!=fingerprint(self.signing_key.public_key())):
++                raise ValueError('witness trust identity mismatch')
++        except (ValueError,TypeError,KeyError) as exc:raise AnchorHold('malformed commit witness record') from exc
++        if not hmac.compare_digest(seal,_seal(self.seal_key,item)):
++            raise AnchorHold('witness seal broken')
++        return item
++
++    def challenge(self,nonce):
++        _hex(nonce,64)
++        with self.lock,closing(self._db()) as db:
++            db.execute('BEGIN')
++            try:item=self._load(db);db.commit()
++            except BaseException:db.rollback();raise
++            payload={'nonce':nonce,'floor':item}
++            return {'response':payload,'signature':self.signing_key.sign(SIGN_DOMAIN+_canonical(payload)).hex()}
++
++    def publish(self,intent:Intent,evidence):
++        """CAS publication after a signed observer has seen an authenticated SQLite commit.
++
++        The attester signs a bounded POST-FINAL observation. A signature does NOT prevent subsequent
++        SQLite rollback; clients must revalidate local DB+anchor against remote floor.
++        """
++        from anchor_wire import validate_intent
++        validate_intent(intent)
++        verify_final_checkpoint(evidence,intent=intent,
++                           deployment_id=self.deployment_id,public_key=self.attester_public_key)
++        with self.lock,closing(self._db()) as db:
++            db.execute('BEGIN IMMEDIATE')
++            try:
++                old=self._load(db)
++                if old['store_id']!=intent.store_id:raise AnchorHold('foreign store')
++                if old['version']==intent.version:
++                    if old['digest']!=intent.digest or old['request_id']!=intent.request_id:
++                        raise AnchorHold('conflicting duplicate commit')
++                    db.commit();return old
++                if (intent.base_version!=old['version'] or intent.base_digest!=old['digest'] or
++                    intent.version!=old['version']+1):
++                    raise AnchorHold('nonmonotonic commit witness CAS')
++                nxt=_record(deployment_id=self.deployment_id,store_id=intent.store_id,
++                     version=intent.version,digest=intent.digest,
++                     attester_fingerprint=fingerprint(self.attester_public_key),
++                     signer_fingerprint=fingerprint(self.signing_key.public_key()),request_id=intent.request_id)
++                db.execute('UPDATE commit_floor SET body=?,seal=? WHERE id=1',(_canonical(nxt),_seal(self.seal_key,nxt)))
++                db.commit();return nxt
++            except BaseException:db.rollback();raise
++
++
++class _Handler(socketserver.StreamRequestHandler):
++    def handle(self):
++        try:
++            raw=self.rfile.readline(MAX_FRAME+1)
++            if not raw.endswith(b'\n') or len(raw)>MAX_FRAME:raise ValueError('invalid frame')
++            msg=unique_json(raw.strip())
++            if type(msg) is not dict:raise ValueError('invalid request')
++            if set(msg)=={'op','nonce'} and msg['op']=='challenge':
++                result=self.server.ledger.challenge(msg['nonce'])
++            elif set(msg)=={'op','intent','evidence'} and msg['op']=='publish':
++                result=self.server.ledger.publish(from_intent(msg['intent']),msg['evidence'])
++            else:raise ValueError('unsupported operation')
++            reply={'ok':True,'result':result}
++        except Exception as exc:reply={'ok':False,'error':type(exc).__name__}
++        self.wfile.write(_canonical(reply)+b'\n')
++
++
++class CommitWitnessServer(socketserver.ThreadingMixIn,socketserver.UnixStreamServer):
++    daemon_threads=True
++    allow_reuse_address=False
++    def __init__(self,path,ledger):
++        super().__init__(str(path),_Handler);self.ledger=ledger;os.chmod(path,0o600)
++
++
++class CommitWitnessClient:
++    def __init__(self,path,*,public_key,timeout=2):
++        if not isinstance(public_key,Ed25519PublicKey):raise TypeError('pinned witness public key required')
++        self.path=str(path);self.public_key=public_key;self.timeout=timeout
++    def _rpc(self,msg):
++        try:
++            with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as s:
++                s.settimeout(self.timeout);s.connect(self.path);s.sendall(_canonical(msg)+b'\n')
++                r=b''
++                while not r.endswith(b'\n') and len(r)<=MAX_FRAME:
++                    piece=s.recv(min(4096,MAX_FRAME+1-len(r)))
++                    if not piece:break
++                    r+=piece
++            if not r.endswith(b'\n') or len(r)>MAX_FRAME:raise ValueError('malformed response')
++            body=unique_json(r.strip())
++            if type(body) is not dict or set(body)!={'ok','result'} or body['ok'] is not True:
++                raise ValueError('remote witness denied')
++            return body['result']
++        except (OSError,ValueError,TimeoutError) as exc:
++            raise AnchorHold('commit witness unavailable/invalid: HOLD') from exc
++    def floor(self,*,deployment_id,store_id):
++        nonce=os.urandom(32).hex()
++        body=self._rpc({'op':'challenge','nonce':nonce})
++        try:
++            if type(body) is not dict or set(body)!={'response','signature'}:raise ValueError('bad signature envelope')
++            resp=body['response']
++            if type(resp) is not dict or set(resp)!={'nonce','floor'} or resp['nonce']!=nonce:
++                raise ValueError('nonce mismatch')
++            sig=_hex(body['signature'],128)
++            self.public_key.verify(bytes.fromhex(sig),SIGN_DOMAIN+_canonical(resp))
++            f=resp['floor']
++            if type(f) is not dict or set(f)!= {'protocol','deployment_id','store_id','version','digest','attester_fingerprint','signer_fingerprint','request_id'}:
++                raise ValueError('invalid floor structure')
++            if f!=_record(**{k:v for k,v in f.items() if k!='protocol'}):raise ValueError('bad floor')
++            if f['deployment_id']!=deployment_id or f['store_id']!=store_id:
++                raise ValueError('wrong deployment or store')
++            return f
++        except (ValueError,TypeError,KeyError,InvalidSignature) as exc:
++            raise AnchorHold('commit witness signature/binding failed: HOLD') from exc
++    def publish(self,intent,evidence):
++        from dataclasses import asdict
++        return self._rpc({'op':'publish','intent':asdict(intent),'evidence':evidence})
++
++
++class CommitGatedWriterCore(AnchoredWriterCore):
++    """Research adapter; successful STATUS and idempotent SET require remote COMMIT floor.
++
++    Does not make the older raw writer entrypoint inaccessible. Production must expose
++    ONLY this adapter after privilege separation, and enforce pinned keys externally.
++    """
++    def __init__(self,store,anchor,*,commit_witness, deployment_id):
++        if not isinstance(commit_witness,CommitWitnessClient):raise TypeError('commit witness client required')
++        self._commit_witness=commit_witness;self._commit_deployment=deployment_id
++        super().__init__(store,anchor)
++        self._check_floor()
++    def _check_floor(self):
++        a=self._coordinator.anchor.status()
++        if a.pending is not None:raise AnchorHold('pending anchor review; HOLD')
++        floor=self._commit_witness.floor(deployment_id=self._commit_deployment,store_id=a.committed.store_id)
++        snap=self._coordinator.read()
++        if snap.version!=floor['version'] or snap.digest.hex()!=floor['digest'] or a.committed.version!=floor['version'] or a.committed.digest!=floor['digest']:
++            raise AnchorHold('external commit floor mismatches local state: HOLD')
++        later=self._commit_witness.floor(deployment_id=self._commit_deployment,store_id=a.committed.store_id)
++        if later['version']!=floor['version'] or later['digest']!=floor['digest']:
++            raise AnchorHold('external witness changed while reading: HOLD')
++        return floor
++    def dispatch(self,op,rid,body):
++        with self._lock:
++            try:self._check_floor()
++            except AnchorHold:return {'ok':False,'error':'EXTERNAL_COMMIT_FLOOR_HOLD'}
++            result=super().dispatch(op,rid,body)
++            if result.get('ok'):
++                try:self._check_floor()
++                except AnchorHold:return {'ok':False,'error':'EXTERNAL_COMMIT_FLOOR_HOLD'}
++            return result
+--- /dev/null
++++ b/commit_witness_daemon_v0720.py
++"""Equal3 v0.7.20 commit checkpoint witness: LOCAL POSIX RESEARCH daemon.
++
++Manual offline bootstrap is required. No auto-bootstrap, no unsafe fallback,
++no command-line secret arguments. This daemon alone does not create an independent
++antirollback domain. Provision separate service accounts/hosts and root-owned
++attester public key using a real deployment system before considering production.
++"""
++import argparse
++import os
++import stat
++from pathlib import Path
++from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey,Ed25519PublicKey
++from external_commit_witness_v0720 import CommitWitnessLedger,CommitWitnessServer
++from writer_service_v0714 import _private_file, _root_provisioned_public_key
++
++
++def serve(*,db_path,socket_path,signer_key_file,seal_key_file,attester_public_key_file,deployment_id):
++    skraw=_private_file(signer_key_file,name='witness signing secret')
++    seal=_private_file(seal_key_file,name='witness seal secret')
++    if len(skraw)!=32 or len(seal)!=32:
++        raise ValueError('raw Ed25519 witness seed and seal credential must both be 32 bytes')
++    signing_key=Ed25519PrivateKey.from_private_bytes(skraw)
++    attester=Ed25519PublicKey.from_public_bytes(_root_provisioned_public_key(attester_public_key_file))
++    path=Path(socket_path).absolute()
++    st=path.parent.lstat()
++    if not stat.S_ISDIR(st.st_mode) or st.st_uid!=os.geteuid() or stat.S_IMODE(st.st_mode)!=0o700:
++        raise PermissionError('socket directory must be private mode 0700 owned by witness service')
++    if path.exists() or path.is_symlink():raise FileExistsError('preexisting witness socket must be resolved offline')
++    ledger=CommitWitnessLedger(db_path,signing_key=signing_key,attester_public_key=attester,
++                               seal_key=seal,deployment_id=deployment_id)
++    with CommitWitnessServer(path,ledger) as server:
++        server.serve_forever()
++
++
++def main():
++    p=argparse.ArgumentParser(description=__doc__)
++    p.add_argument('--db-path',required=True)
++    p.add_argument('--socket-path',required=True)
++    p.add_argument('--signer-key-file',required=True)
++    p.add_argument('--seal-key-file',required=True)
++    p.add_argument('--attester-public-key-file',required=True)
++    p.add_argument('--deployment-id',required=True)
++    args=p.parse_args();serve(**vars(args))
++
++if __name__=='__main__':main()
+--- /dev/null
++++ b/test_external_commit_witness_v0720.py
++"""Commit witness v0720: positive, negative-first, RPC, key trust and CAS tests."""
++import hashlib
++import multiprocessing
++import time
++import os
++import shutil
++import sqlite3
++import tempfile
++import threading
++import unittest
++from contextlib import closing
++from pathlib import Path
++from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
++
++from anchor_protocol import AnchorHold, MemoryCASAnchor, CoordinatedStore, position_for_genesis
++from state_store import StateStore, prepare_update
++from external_commit_witness_v0720 import issue_final_checkpoint
++from external_commit_witness_v0720 import (CommitWitnessLedger,CommitWitnessServer,
++    CommitWitnessClient,CommitGatedWriterCore)
++from writer_service_v0714 import STATUS,SET,ZERO_REQUEST
++
++
++def _child_commit_service(db,socket_path,signing_key,attester_key,seal,deploy):
++    ledger=CommitWitnessLedger(db,signing_key=signing_key,attester_public_key=attester_key,
++        seal_key=seal,deployment_id=deploy)
++    with CommitWitnessServer(socket_path,ledger) as server:
++        server.serve_forever(poll_interval=.01)
++
++KEY=b'k'*32;DEPLOY='commit-v0720-research';REVIEW=b'R'*32;SEAL=b'S'*32
++class CommitWitnessTests(unittest.TestCase):
++    def setUp(self):
++        temp=tempfile.TemporaryDirectory();self.addCleanup(temp.cleanup)
++        self.base=Path(temp.name);self.db=self.base/'store.db'
++        self.store=StateStore.create(self.db,key=KEY,initial=b'genesis',journal_mode='DELETE')
++        self.genesis=position_for_genesis(self.store)
++        self.genesis_backup=self.base/'genesis.db';shutil.copyfile(self.db,self.genesis_backup)
++        self.anchor=MemoryCASAnchor(self.genesis,reviewer_key=REVIEW)
++        self.co=CoordinatedStore(self.store,self.anchor)
++        self.signer=Ed25519PrivateKey.generate();self.observer=Ed25519PrivateKey.generate()
++        self.rogue=Ed25519PrivateKey.generate()
++        self.dir=self.base/'witness';self.dir.mkdir(mode=0o700)
++        self.path=self.dir/'commits.db';self.sock=self.dir/'commit.sock'
++        self.ledger=CommitWitnessLedger.bootstrap(self.path,self.genesis,signing_key=self.signer,
++            attester_public_key=self.observer.public_key(),seal_key=SEAL,deployment_id=DEPLOY)
++        self.server=CommitWitnessServer(self.sock,self.ledger)
++        self.thread=threading.Thread(target=self.server.serve_forever,kwargs={'poll_interval':0.01},daemon=True)
++        self.thread.start();self.addCleanup(self.close)
++        self.client=CommitWitnessClient(self.sock,public_key=self.signer.public_key())
++    def close(self):self.server.shutdown();self.server.server_close();self.thread.join(timeout=2)
++    def floor(self):return self.client.floor(deployment_id=DEPLOY,store_id=self.genesis.store_id)
++    def prepare(self,body=b'next',rid=None):
++        p,_=prepare_update(self.store,body,request_id=rid or os.urandom(16))
++        self.co.apply(p)
++        intent=self.anchor.status().pending
++        return intent
++    def finalize(self,intent):
++        self.co.adjudicate('FINALIZE_COMMIT',self.anchor.test_only_review_token(intent,'FINALIZE_COMMIT'))
++    def evidence(self,intent):
++        return issue_final_checkpoint(store=self.store,anchor=self.anchor,intent=intent,
++               deployment_id=DEPLOY,signing_key=self.observer)
++    def publish(self,intent,evidence):return self.client.publish(intent,evidence)
++    def test_bootstrap_committed_floor_at_genesis(self):
++        self.assertEqual(self.floor()['version'],0)
++        self.assertEqual(self.floor()['digest'],self.genesis.digest)
++    def test_complete_commit_publish_then_guarded_read(self):
++        i=self.prepare();self.finalize(i);self.publish(i,self.evidence(i))
++        g=CommitGatedWriterCore(self.store,self.anchor,commit_witness=self.client,deployment_id=DEPLOY)
++        self.assertEqual(g.dispatch(STATUS,ZERO_REQUEST,b'')['version'],1)
++        self.assertTrue(g.dispatch(SET,bytes.fromhex(i.request_id),b'next')['already_committed'])
++    def test_without_commit_publication_must_hold_even_if_anchor_matches(self):
++        i=self.prepare();self.finalize(i)
++        self.assertEqual(self.co.diagnose().code,'MATCH')
++        with self.assertRaises(AnchorHold):
++            CommitGatedWriterCore(self.store,self.anchor,commit_witness=self.client,deployment_id=DEPLOY)
++    def test_no_checkpoint_before_anchor_finalization(self):
++        from anchor_protocol import ReviewDenied
++        i=self.prepare()
++        with self.assertRaises(ReviewDenied):self.evidence(i)
++        self.assertEqual(self.floor()['version'],0)
++        self.finalize(i);self.publish(i,self.evidence(i))
++        self.assertEqual(CommitGatedWriterCore(self.store,self.anchor,commit_witness=self.client,deployment_id=DEPLOY).dispatch(STATUS,ZERO_REQUEST,b'')['version'],1)
++    def test_retransmission_idempotent_exact_same_evidence(self):
++        i=self.prepare();self.finalize(i);e=self.evidence(i);a=self.publish(i,e);b=self.publish(i,e)
++        self.assertEqual(a,b)
++    def test_reject_publish_without_evidence(self):
++        i=self.prepare();self.finalize(i)
++        with self.assertRaises(AnchorHold):self.publish(i,{})
++        self.assertEqual(self.floor()['version'],0)
++    def test_reject_foreign_observer_signature(self):
++        i=self.prepare();self.finalize(i);e=self.evidence(i)
++        from external_commit_witness_v0720 import OBS_DOMAIN
++        from commit_evidence_v0716 import _canonical
++        e['signature']=self.rogue.sign(OBS_DOMAIN+_canonical(e['statement'])).hex()
++        with self.assertRaises(AnchorHold):self.publish(i,e)
++    def test_reject_modified_observation_after_signing(self):
++        i=self.prepare();self.finalize(i);e=self.evidence(i);e['statement']['digest']='f'*64
++        with self.assertRaises(AnchorHold):self.publish(i,e)
++    def test_reject_skip_or_old_version_commit(self):
++        i=self.prepare();self.finalize(i);e=self.evidence(i);self.publish(i,e)
++        # After version 1 publication, replaying version 1 EXACT is idempotent,
++        # not a path to another version, and a conflicting repeated request fails.
++        from dataclasses import replace
++        with self.assertRaises(AnchorHold):self.publish(replace(i,request_id='f'*32),e)
++        self.assertEqual(self.floor()['version'],1)
++    def test_two_commits_monotone_chain(self):
++        i=self.prepare();self.finalize(i);self.publish(i,self.evidence(i))
++        j=self.prepare(body=b'twice');self.finalize(j);self.publish(j,self.evidence(j))
++        self.assertEqual(self.floor()['version'],2)
++        self.assertEqual(self.floor()['digest'],j.digest)
++    def test_mutation_in_remote_head_detected_by_seal(self):
++        with closing(sqlite3.connect(self.path)) as db:
++            db.execute('UPDATE commit_floor SET body=? WHERE id=1',(b'{}',));db.commit()
++        with self.assertRaises(AnchorHold):self.floor()
++    def test_mutation_of_signed_seal_detected(self):
++        with closing(sqlite3.connect(self.path)) as db:
++            db.execute('UPDATE commit_floor SET seal=? WHERE id=1',(b'X'*32,));db.commit()
++        with self.assertRaises(AnchorHold):self.floor()
++    def test_insert_extra_floor_row_detected(self):
++        with closing(sqlite3.connect(self.path)) as db:
++            row=db.execute('SELECT body,seal FROM commit_floor').fetchone()
++            db.execute('DROP TABLE commit_floor')
++            db.execute('CREATE TABLE commit_floor(id INTEGER PRIMARY KEY,body BLOB,seal BLOB)')
++            db.executemany('INSERT INTO commit_floor VALUES(?,?,?)',[(1,*row),(2,*row)])
++            db.commit()
++        with self.assertRaises(AnchorHold):self.floor()
++    def test_forged_witness_response_detected(self):
++        wrong=CommitWitnessClient(self.sock,public_key=self.rogue.public_key())
++        with self.assertRaises(AnchorHold):wrong.floor(deployment_id=DEPLOY,store_id=self.genesis.store_id)
++    def test_replayed_witness_nonce_detected(self):
++        saved=self.client._rpc({'op':'challenge','nonce':'0'*64})
++        f=CommitWitnessClient(self.sock,public_key=self.signer.public_key());f._rpc=lambda req:saved
++        with self.assertRaises(AnchorHold):f.floor(deployment_id=DEPLOY,store_id=self.genesis.store_id)
++    def test_commit_witness_outage_must_hold(self):
++        c=CommitWitnessClient(self.dir/'missing.sock',public_key=self.signer.public_key(),timeout=.1)
++        with self.assertRaises(AnchorHold):CommitGatedWriterCore(self.store,self.anchor,commit_witness=c,deployment_id=DEPLOY)
++    def test_store_and_anchor_joint_rollback_detected_when_witness_survives(self):
++        i=self.prepare();self.finalize(i);self.publish(i,self.evidence(i))
++        shutil.copyfile(self.genesis_backup,self.db)
++        restored=StateStore(self.db,key=KEY,journal_mode='DELETE')
++        old_anchor=MemoryCASAnchor(self.genesis,reviewer_key=REVIEW)
++        self.assertEqual(CoordinatedStore(restored,old_anchor).diagnose().code,'MATCH')
++        with self.assertRaises(AnchorHold):
++            CommitGatedWriterCore(restored,old_anchor,commit_witness=self.client,deployment_id=DEPLOY)
++    def test_joint_rollback_including_witness_still_possible(self):
++        snap=self.base/'old-witness.db';shutil.copyfile(self.path,snap)
++        i=self.prepare();self.finalize(i);self.publish(i,self.evidence(i))
++        shutil.copyfile(self.genesis_backup,self.db);shutil.copyfile(snap,self.path)
++        restored=StateStore(self.db,key=KEY,journal_mode='DELETE')
++        old_anchor=MemoryCASAnchor(self.genesis,reviewer_key=REVIEW)
++        # Deliberate falsification of a same-failure-domain deployment.
++        g=CommitGatedWriterCore(restored,old_anchor,commit_witness=self.client,deployment_id=DEPLOY)
++        self.assertEqual(g.dispatch(STATUS,ZERO_REQUEST,b'')['version'],0)
++    def test_stale_signed_postfinal_checkpoint_cannot_prevent_later_rollback(self):
++        i=self.prepare();self.finalize(i);e=self.evidence(i)
++        shutil.copyfile(self.genesis_backup,self.db)
++        # Attestation was true at signing time; state is now stale. The witness
++        # cannot re-read SQLite, but the client's check must HOLD afterwards.
++        self.publish(i,e)
++        restored=StateStore(self.db,key=KEY,journal_mode='DELETE')
++        old_anchor=MemoryCASAnchor(self.genesis,reviewer_key=REVIEW)
++        with self.assertRaises(AnchorHold):
++            CommitGatedWriterCore(restored,old_anchor,commit_witness=self.client,deployment_id=DEPLOY)
++
++    def test_bootstrap_existing_witness_denied(self):
++        with self.assertRaises(FileExistsError):
++            CommitWitnessLedger.bootstrap(self.path,self.genesis,signing_key=self.signer,
++                attester_public_key=self.observer.public_key(),seal_key=SEAL,deployment_id=DEPLOY)
++    def test_wrong_attester_or_seal_on_reopen(self):
++        with self.assertRaises(AnchorHold):CommitWitnessLedger(self.path,signing_key=self.signer,
++            attester_public_key=self.rogue.public_key(),seal_key=SEAL,deployment_id=DEPLOY)
++        with self.assertRaises(AnchorHold):CommitWitnessLedger(self.path,signing_key=self.signer,
++            attester_public_key=self.observer.public_key(),seal_key=b'X'*32,deployment_id=DEPLOY)
++    def test_actual_separate_os_process_serves_nonce_challenge(self):
++        # Same host and same UID; process separation is NOT administrative independence.
++        path=self.dir/'second.sock'
++        ctx=multiprocessing.get_context('fork')
++        proc=ctx.Process(target=_child_commit_service,args=(self.path,path,self.signer,
++                         self.observer.public_key(),SEAL,DEPLOY))
++        proc.start()
++        try:
++            c=CommitWitnessClient(path,public_key=self.signer.public_key(),timeout=.5)
++            found=None
++            for _ in range(60):
++                if path.exists():
++                    try:found=c.floor(deployment_id=DEPLOY,store_id=self.genesis.store_id);break
++                    except AnchorHold:pass
++                time.sleep(.02)
++            self.assertIsNotNone(found)
++            self.assertEqual(found['version'],0)
++            self.assertNotEqual(proc.pid,os.getpid())
++        finally:
++            proc.terminate();proc.join(timeout=2)
++            if proc.is_alive():proc.kill();proc.join()
++        with self.assertRaises(AnchorHold):c.floor(deployment_id=DEPLOY,store_id=self.genesis.store_id)
++
++    def test_unapproved_witness_signer_replacement_denied_on_reopen(self):
++        with self.assertRaises(AnchorHold):
++            CommitWitnessLedger(self.path,signing_key=self.rogue,
++                attester_public_key=self.observer.public_key(),seal_key=SEAL,deployment_id=DEPLOY)
++
++    def test_writer_default_without_witness_remains_unsafe_and_not_production(self):
++        i=self.prepare();self.finalize(i)
++        from anchored_writer_v0715 import AnchoredWriterCore
++        core=AnchoredWriterCore(self.store,self.anchor)
++        self.assertTrue(core.dispatch(STATUS,ZERO_REQUEST,b'')['ok'])
++        # This is the historical research bypass; production may not expose it.
++
++if __name__=='__main__':unittest.main()
+--- /dev/null
++++ b/run_v0720_suites.py
++"""Isolated-process regression; never infer success from missing/timeout output."""
++from pathlib import Path
++import os,subprocess,sys,time,re,json
++root=Path(__file__).resolve().parent
++out=root/'EVIDENCE_V0720';out.mkdir(exist_ok=True)
++groups={
++ 'anchor':['test_anchor_protocol','test_anchor_v077','test_anchor_v078','test_anchor_v079','test_anchor_wire'],
++ 'equal':['test_equal3','test_extensions','test_fault_lab','test_guarded_store','test_release_preflight_v078','test_v0713_rollback'],
++ 'store':['test_store','test_v07','test_v071','test_v0710_security','test_v0712_integrity','test_v074_hardening','test_witness'],
++ 'runtime':['test_runtime_gate_v0711','test_sqlite_build_v0711'],
++ 'writer':['test_writer_service_v0714'],
++ 'coordinator':['test_anchored_writer_v0715'],
++ 'attested':['test_attested_commit_v0716'],
++ 'policy':['test_attester_policy_v0717'],
++ 'root_rotation':['test_root_rotation_v0718'],
++ 'external_witness':['test_external_epoch_witness_v0719'],
++ 'commit_witness':['test_external_commit_witness_v0720'],
++}
++summary={};success=True
++for name,group in groups.items():
++ print('START',name,flush=True)
++ start=time.monotonic()
++ try:
++  result=subprocess.run([sys.executable,'-W','error::ResourceWarning','-m','unittest','-q',*group],
++      cwd=root,env={**os.environ,'PYTHONDONTWRITEBYTECODE':'1'},capture_output=True,text=True,timeout=145)
++  log=result.stdout+result.stderr
++  match=re.search(r'Ran (\d+) tests? in ([\d.]+)s',log)
++  good=result.returncode==0 and match is not None
++  summary[name]={'status':'PASS' if good else 'FAIL','count':int(match.group(1)) if match else None,
++                 'elapsed_seconds':round(time.monotonic()-start,3),'returncode':result.returncode}
++ except subprocess.TimeoutExpired as exc:
++  log=(exc.stdout.decode(errors='replace') if isinstance(exc.stdout,bytes) else (exc.stdout or ''))+'\nTIMEOUT'
++  good=False
++  summary[name]={'status':'TIMEOUT','count':None,'elapsed_seconds':round(time.monotonic()-start,3)}
++ (out/(name+'.log')).write_text(log)
++ print(name,summary[name],flush=True)
++ if not good:
++  success=False;print('ERROR TAIL',log[-2000:],flush=True);break
++summary['all_pass']=success and len(summary)==len(groups)
++summary['total']=sum(summary[k].get('count') or 0 for k in groups if k in summary)
++(out/'suite_summary.json').write_text(json.dumps(summary,indent=2)+'\n')
++print('SUMMARY',json.dumps(summary),flush=True)
++sys.exit(0 if summary['all_pass'] else 1)
+--- /dev/null
++++ b/benchmark_v0720.py
++"""Uncontended ABBA STATUS benchmark: historical core vs signed commit floor.
++
++One Python process but same DB and v0720 code for both variants. Synthetic
++research-only microbenchmark, not independent host or multiuser traffic.
++"""
++import csv,hashlib,json,statistics,time
++from pathlib import Path
++from anchored_writer_v0715 import AnchoredWriterCore
++from external_commit_witness_v0720 import CommitGatedWriterCore
++from test_external_commit_witness_v0720 import CommitWitnessTests,DEPLOY
++from writer_service_v0714 import STATUS,ZERO_REQUEST
++
++out=Path(__file__).parent/'EVIDENCE_V0720';out.mkdir(exist_ok=True)
++rows=[]
++for count in (1024,65536):
++    t=CommitWitnessTests(methodName='runTest');t.setUp()
++    try:
++        intent=t.prepare(body=b'x'*count);t.finalize(intent);t.publish(intent,t.evidence(intent))
++        plain=AnchoredWriterCore(t.store,t.anchor)
++        guarded=CommitGatedWriterCore(t.store,t.anchor,commit_witness=t.client,deployment_id=DEPLOY)
++        for roundnum,order in enumerate((('plain','guarded'),('guarded','plain'),('guarded','plain'),('plain','guarded'))):
++            for name in order:
++                core=plain if name=='plain' else guarded
++                for _ in range(10):core.dispatch(STATUS,ZERO_REQUEST,b'')
++                timings=[]
++                for _ in range(80):
++                    start=time.perf_counter_ns()
++                    value=core.dispatch(STATUS,ZERO_REQUEST,b'')
++                    elapsed=(time.perf_counter_ns()-start)/1e6
++                    if not value['ok'] or value['version']!=1:raise RuntimeError('invalid status')
++                    timings.append(elapsed)
++                rows.append(dict(payload_bytes=count,round=roundnum,mode=name,
++                    samples=len(timings),median_ms=round(statistics.median(timings),6),
++                    p95_ms=round(sorted(timings)[int(.95*len(timings))-1],6),
++                    max_ms=round(max(timings),6)))
++    finally:t.doCleanups()
++path=out/'benchmark_commit_floor_abba.csv'
++with path.open('w',newline='') as f:
++    writer=csv.DictWriter(f,fieldnames=rows[0].keys());writer.writeheader();writer.writerows(rows)
++for n in (1024,65536):
++    for name in ('plain','guarded'):
++        med=statistics.median(row['median_ms'] for row in rows if row['payload_bytes']==n and row['mode']==name)
++        print(n,name,round(med,4),'ms',flush=True)
++print('benchmark_source_sha256',hashlib.sha256((Path(__file__).parent/'external_commit_witness_v0720.py').read_bytes()).hexdigest())

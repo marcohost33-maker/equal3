@@ -1,0 +1,23 @@
+{
+  "project": "=== / Equal3",
+  "candidate_version": "0.7.4-research",
+  "decision": "NO_GO",
+  "as_of": "2026-10-24",
+  "evidence": {
+    "original_manifest_sha256_checks": 37,
+    "original_unittests_passed": 96,
+    "candidate_unittests_passed": 113,
+    "new_negative_tests": 17,
+    "combined_coverage_percent_rounded": 86,
+    "original_artifact_sha256": "027bdcb5c2074cab90049ffa1a0a100ea4c8ff776d174d5acc0e5ecfc0ecbcf7"
+  },
+  "blocking_gates": [
+    {"id":"P0-ANCHOR", "status":"OPEN", "reason":"independent non-rollbackable monotonic anchor absent"},
+    {"id":"P0-RAW-WRITER", "status":"OPEN", "reason":"raw write API remains reachable outside cooperative facade"},
+    {"id":"P0-COMMIT-GAP", "status":"OPEN", "reason":"external witness publish and SQLite commit are not atomic"},
+    {"id":"P0-ENCRYPTION", "status":"OPEN", "reason":"live DB, WAL/SHM, backups and temp plaintext"},
+    {"id":"P0-VFS-POWERLOSS", "status":"OPEN", "reason":"no independent crash/powercut VFS fault lab"},
+    {"id":"P0-SECURITY-REVIEW", "status":"OPEN", "reason":"no independent pen test/release signoff"}
+  ],
+  "notes": "Machine-readable status declaration only; no independently signed release attestation. Boolean evidence cannot authorize promotion by itself."
+}

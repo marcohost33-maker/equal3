@@ -1,0 +1,10 @@
+{
+  "benchmark": "Ed25519+JSON+policy binding, mock-mapped patched SQLite, no I/O",
+  "measurement_scope": "SYNTHETIC cryptographic gate only, not production SQLite",
+  "median_ms": 0.1349015,
+  "n": 300,
+  "p95_ms": 0.267708,
+  "platform": "Linux-6.18.55-x86_64-with-glibc2.41",
+  "python": "3.13.5",
+  "release_verdict": "NO_GO"
+}

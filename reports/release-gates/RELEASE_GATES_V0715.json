@@ -1,0 +1,26 @@
+{
+  "project":"=== / Equal3",
+  "candidate":"0.7.15-research",
+  "date":"2026-10-25",
+  "decision":"NO_GO",
+  "evidence":{
+    "previous_regression_tests":286,
+    "new_tests":23,
+    "passed_in_six_independent_process_lanes":309,
+    "in_process_bench_samples_per_size_and_mode":80,
+    "synthetic_dual_socket_samples_per_size":24,
+    "python":"3.13.5",
+    "sqlite":"3.46.1"
+  },
+  "gates":{
+    "coordinator_writer_reference":"TESTED_RESEARCH_ONLY",
+    "independent_monotonic_anchor":"OPEN_JOINT_ROLLBACK_FALSIFIED",
+    "signed_commit_attestation":"OPEN",
+    "mandatory_writer_service":"OPEN_PRODUCTION_SERVE_FAIL_CLOSED",
+    "patched_verified_sqlite":"OPEN",
+    "encryption_key_separation":"OPEN",
+    "vfs_powerloss":"OPEN",
+    "independent_security_review":"OPEN"
+  },
+  "warning":"SHA256 manifest checks file consistency only; no signer or independent trust-root."
+}

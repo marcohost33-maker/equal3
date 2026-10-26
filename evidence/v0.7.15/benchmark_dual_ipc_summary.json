@@ -1,0 +1,17 @@
+{
+  "scope": "Two real Unix sockets with same-UID synthetic local authority and simulated reviewer; 24 commits/size; NO independent trust",
+  "results": [
+    {
+      "bytes": 1024,
+      "count": 24,
+      "p50_ms": 25.268,
+      "p95_ms": 39.868
+    },
+    {
+      "bytes": 65536,
+      "count": 24,
+      "p50_ms": 28.689,
+      "p95_ms": 33.676
+    }
+  ]
+}

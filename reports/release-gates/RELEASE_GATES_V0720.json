@@ -1,0 +1,24 @@
+{
+  "version": "0.7.20 Research",
+  "date": "2026-10-25",
+  "decision": "NO_GO",
+  "current_sqlite": "3.46.1",
+  "local_completed": {
+    "commit_floor_cas": "research",
+    "signed_postfinal_evidence": "research",
+    "fresh_nonce_challenge": "research",
+    "writer_guard_adapter": "research",
+    "split_process_rpc": "same_uid_research"
+  },
+  "p0_unmet": [
+    "independent_nonrollbackable_commit_witness",
+    "observer_trust_and_postfinal_TOCTOU",
+    "exclusive_production_writer_enforcement",
+    "cross_host_identity_mtls",
+    "sqlite_patched_runtime",
+    "powerloss_faults",
+    "data_encryption_and_key_rotation",
+    "independent_security_dsg_review",
+    "witness_signed_gossip_anti_equivocation"
+  ]
+}

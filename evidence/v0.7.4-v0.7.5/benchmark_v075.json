@@ -1,0 +1,160 @@
+{
+  "platform": "Linux-6.18.55-x86_64-with-glibc2.41",
+  "python": "3.13.5",
+  "sqlite": "3.46.1",
+  "benchmark_contract": "synthetic single-process SQLite WAL FULL, 24 post-warmup updates each per case, proposal prepared outside timing; simulator per-write manual reviewer token; NOT a real independent anchor",
+  "methods": [
+    {
+      "payload_bytes": 1024,
+      "run": 1,
+      "method": "raw",
+      "n": 24,
+      "p50_ms": 2.5961,
+      "p95_ms": 3.4492,
+      "min_ms": 2.2779,
+      "max_ms": 4.7433
+    },
+    {
+      "payload_bytes": 1024,
+      "run": 1,
+      "method": "guarded",
+      "n": 24,
+      "p50_ms": 5.6823,
+      "p95_ms": 6.1714,
+      "min_ms": 5.0398,
+      "max_ms": 6.2319
+    },
+    {
+      "payload_bytes": 1024,
+      "run": 1,
+      "method": "prepared",
+      "n": 24,
+      "p50_ms": 5.2222,
+      "p95_ms": 5.6835,
+      "min_ms": 4.6672,
+      "max_ms": 5.722
+    },
+    {
+      "payload_bytes": 1024,
+      "run": 2,
+      "method": "prepared",
+      "n": 24,
+      "p50_ms": 5.5045,
+      "p95_ms": 8.404,
+      "min_ms": 4.9038,
+      "max_ms": 9.2229
+    },
+    {
+      "payload_bytes": 1024,
+      "run": 2,
+      "method": "guarded",
+      "n": 24,
+      "p50_ms": 4.9397,
+      "p95_ms": 5.3536,
+      "min_ms": 4.5529,
+      "max_ms": 5.6654
+    },
+    {
+      "payload_bytes": 1024,
+      "run": 2,
+      "method": "raw",
+      "n": 24,
+      "p50_ms": 2.0605,
+      "p95_ms": 2.5017,
+      "min_ms": 1.8817,
+      "max_ms": 2.5351
+    },
+    {
+      "payload_bytes": 65536,
+      "run": 1,
+      "method": "raw",
+      "n": 24,
+      "p50_ms": 2.7479,
+      "p95_ms": 3.1647,
+      "min_ms": 2.553,
+      "max_ms": 3.1751
+    },
+    {
+      "payload_bytes": 65536,
+      "run": 1,
+      "method": "guarded",
+      "n": 24,
+      "p50_ms": 6.1902,
+      "p95_ms": 7.717,
+      "min_ms": 5.737,
+      "max_ms": 7.9186
+    },
+    {
+      "payload_bytes": 65536,
+      "run": 1,
+      "method": "prepared",
+      "n": 24,
+      "p50_ms": 6.3288,
+      "p95_ms": 7.1892,
+      "min_ms": 5.8706,
+      "max_ms": 10.6419
+    },
+    {
+      "payload_bytes": 65536,
+      "run": 2,
+      "method": "prepared",
+      "n": 24,
+      "p50_ms": 6.7931,
+      "p95_ms": 9.0193,
+      "min_ms": 5.9081,
+      "max_ms": 10.0252
+    },
+    {
+      "payload_bytes": 65536,
+      "run": 2,
+      "method": "guarded",
+      "n": 24,
+      "p50_ms": 6.3725,
+      "p95_ms": 7.8673,
+      "min_ms": 5.4178,
+      "max_ms": 7.8813
+    },
+    {
+      "payload_bytes": 65536,
+      "run": 2,
+      "method": "raw",
+      "n": 24,
+      "p50_ms": 3.0493,
+      "p95_ms": 3.7891,
+      "min_ms": 2.5667,
+      "max_ms": 3.9294
+    }
+  ],
+  "verify_growth": [
+    {
+      "version": 0,
+      "verify_p50_ms": 0.4463,
+      "verify_p95_ms": 0.6255,
+      "measurements": 10
+    },
+    {
+      "version": 25,
+      "verify_p50_ms": 0.5763,
+      "verify_p95_ms": 0.7794,
+      "measurements": 10
+    },
+    {
+      "version": 50,
+      "verify_p50_ms": 0.9075,
+      "verify_p95_ms": 1.1652,
+      "measurements": 10
+    },
+    {
+      "version": 100,
+      "verify_p50_ms": 2.1056,
+      "verify_p95_ms": 4.2157,
+      "measurements": 10
+    },
+    {
+      "version": 200,
+      "verify_p50_ms": 1.8731,
+      "verify_p95_ms": 2.0895,
+      "measurements": 10
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "additional_tests": 21,
+  "baseline_tests": 219,
+  "candidate": "0.7.11-research",
+  "current_sqlite": "3.46.1",
+  "date": "2026-10-25",
+  "gate_benchmark": {
+    "benchmark": "Ed25519+JSON+policy binding, mock-mapped patched SQLite, no I/O",
+    "measurement_scope": "SYNTHETIC cryptographic gate only, not production SQLite",
+    "median_ms": 0.1349015,
+    "n": 300,
+    "p95_ms": 0.267708,
+    "platform": "Linux-6.18.55-x86_64-with-glibc2.41",
+    "python": "3.13.5",
+    "release_verdict": "NO_GO"
+  },
+  "patched_sqlite_compiled": false,
+  "platform": "Linux-6.18.55-x86_64-with-glibc2.41",
+  "project": "Equal3",
+  "python": "3.13.5",
+  "release_decision": "NO_GO",
+  "source_archive_obtained": false,
+  "total_tests": 240
+}

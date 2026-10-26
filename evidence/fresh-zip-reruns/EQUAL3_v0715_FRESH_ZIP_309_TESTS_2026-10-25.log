@@ -1,0 +1,13 @@
+RUN anchor
+anchor {'tests': 91, 'status': 'PASS', 'returncode': 0, 'seconds': 36.258}
+RUN equal
+equal {'tests': 57, 'status': 'PASS', 'returncode': 0, 'seconds': 13.664}
+RUN store
+store {'tests': 96, 'status': 'PASS', 'returncode': 0, 'seconds': 20.605}
+RUN runtime
+runtime {'tests': 21, 'status': 'PASS', 'returncode': 0, 'seconds': 0.838}
+RUN protected_writer
+protected_writer {'tests': 21, 'status': 'PASS', 'returncode': 0, 'seconds': 4.15}
+RUN new_coordinated_writer
+new_coordinated_writer {'tests': 23, 'status': 'PASS', 'returncode': 0, 'seconds': 1.181}
+RESULT {"anchor": {"tests": 91, "status": "PASS", "returncode": 0, "seconds": 36.258}, "equal": {"tests": 57, "status": "PASS", "returncode": 0, "seconds": 13.664}, "store": {"tests": 96, "status": "PASS", "returncode": 0, "seconds": 20.605}, "runtime": {"tests": 21, "status": "PASS", "returncode": 0, "seconds": 0.838}, "protected_writer": {"tests": 21, "status": "PASS", "returncode": 0, "seconds": 4.15}, "new_coordinated_writer": {"tests": 23, "status": "PASS", "returncode": 0, "seconds": 1.181}}

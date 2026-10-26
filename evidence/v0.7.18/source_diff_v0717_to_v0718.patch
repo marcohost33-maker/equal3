@@ -1,0 +1,686 @@
+--- v0717/anchor_wire.py
++++ v0718/anchor_wire.py
+@@ -516,7 +516,8 @@
+         raise PermissionError('group socket directory requires owner=anchor, group=writer and mode=0710')
+ 
+ def serve(db_path:str|Path,sock_path:str|Path,*,writer_key:bytes,reviewer_key:bytes,seal_key:bytes,writer_uid:int,research_unsafe_sqlite:bool=False,socket_gid:int|None=None,
+-          attester_public_key=None,deployment_id=None, research_unattested=False):
++          attester_public_key=None,deployment_id=None, research_unattested=False,
++          root_public_key=None, trusted_min_epoch=None, research_unrooted=False):
+     if not hasattr(socket,'SO_PEERCRED'):raise RuntimeError('SO_PEERCRED unsupported; refusing to serve')
+     if attester_public_key is None:
+         if research_unattested is not True:
+@@ -524,10 +525,24 @@
+         backend=PersistentCASAnchor(db_path,reviewer_key=reviewer_key,seal_key=seal_key,
+                                     research_unsafe_sqlite=research_unsafe_sqlite)
+     else:
+-        from commit_evidence_v0716 import EvidenceRequiredCASAnchor
+-        backend=EvidenceRequiredCASAnchor(db_path,reviewer_key=reviewer_key,seal_key=seal_key,
+-                                           attester_public_key=attester_public_key,
+-                                           deployment_id=deployment_id)
++        # Validate deployment before choosing a backend (legacy error contract).
++        from commit_evidence_v0716 import DEPLOY
++        if type(deployment_id) is not str or DEPLOY.fullmatch(deployment_id) is None:
++            raise ValueError('invalid deployment identity')
++        if root_public_key is None:
++            if research_unrooted is not True:
++                raise AnchorHold('P0 root authorization missing; rooted authority required')
++            from commit_evidence_v0716 import EvidenceRequiredCASAnchor
++            backend=EvidenceRequiredCASAnchor(db_path,reviewer_key=reviewer_key,seal_key=seal_key,
++                                              attester_public_key=attester_public_key,
++                                              deployment_id=deployment_id)
++        else:
++            if type(trusted_min_epoch) is not int or trusted_min_epoch < 0:
++                raise AnchorHold('trusted external minimum epoch required')
++            from trust_rotation_v0718 import RootControlledCASAnchor
++            backend=RootControlledCASAnchor(db_path,reviewer_key=reviewer_key,seal_key=seal_key,
++                    attester_public_key=attester_public_key,deployment_id=deployment_id,
++                    root_public_key=root_public_key,min_epoch=trusted_min_epoch)
+     sock_path=Path(sock_path).absolute()
+     _require_socket_parent(sock_path,socket_gid)
+     if os.path.lexists(sock_path):raise FileExistsError('socket path exists; no automatic unlink')
+@@ -580,6 +595,12 @@
+     ap.add_argument('--attester-public-key-file',default=None,
+                     help='Root-provisioned 32-byte Ed25519 public key; mandatory except unsafe RESEARCH mode')
+     ap.add_argument('--deployment-id',default=None)
++    ap.add_argument('--root-public-key-file',default=None,
++                    help='32 raw bytes of externally provisioned Ed25519 ROOT verification key')
++    ap.add_argument('--trusted-min-epoch',type=int,default=None,
++                    help='MUST originate from an independently trusted monotonic epoch source')
++    ap.add_argument('--allow-unrooted-research-only',action='store_true',
++                    help='UNSAFE: allow legacy v0717 local trust, for synthetic research tests only')
+     ap.add_argument('--allow-unattested-research-only',action='store_true')
+     cfg=ap.parse_args()
+     attester_key=None
+@@ -590,11 +611,19 @@
+         from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+         attester_key=Ed25519PublicKey.from_public_bytes(
+             _root_provisioned_public_key(cfg.attester_public_key_file))
++    root_key=None
++    if cfg.root_public_key_file is not None:
++        from writer_service_v0714 import _root_provisioned_public_key
++        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
++        root_key=Ed25519PublicKey.from_public_bytes(
++                 _root_provisioned_public_key(cfg.root_public_key_file))
+     serve(cfg.db,cfg.socket,writer_key=read_credential(cfg.writer_key_file),
+           reviewer_key=read_credential(cfg.reviewer_key_file),seal_key=read_credential(cfg.seal_key_file),
+           writer_uid=cfg.writer_uid,socket_gid=cfg.writer_gid,
+           research_unsafe_sqlite=cfg.allow_unsafe_sqlite_research_only,
+           attester_public_key=attester_key,deployment_id=cfg.deployment_id,
+-          research_unattested=cfg.allow_unattested_research_only)
++          research_unattested=cfg.allow_unattested_research_only,
++          root_public_key=root_key,trusted_min_epoch=cfg.trusted_min_epoch,
++          research_unrooted=cfg.allow_unrooted_research_only)
+ 
+ if __name__=='__main__':main()
+--- /dev/null
++++ v0718/trust_rotation_v0718.py
+@@ -0,0 +1,229 @@
++"""Equal3 v0.7.18 research: root-authorized attester rotation with epoch flooring.
++
++This is NOT a nonrollbackable trust root. A trustworthy external minimum epoch
++is required to reject a coherent rollback of BOTH local trust databases and policy.
++Never embed or expose a root signing private key in an anchor service.
++"""
++from __future__ import annotations
++import hashlib
++import hmac
++import re
++import sqlite3
++import time
++from dataclasses import asdict
++from cryptography.exceptions import InvalidSignature
++from cryptography.hazmat.primitives import serialization
++from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey, Ed25519PrivateKey
++from anchor_protocol import AnchorHold, ReviewDenied
++from commit_evidence_v0716 import (_canonical, _attester_policy, _policy_seal,
++     EvidenceRequiredCASAnchor, DEPLOY)
++
++ROOT_DOMAIN = b'Equal3/root-authorized-rotation/v0718\x00'
++ROOT_SEAL_DOMAIN = b'Equal3/root-binding-integrity/v0718\x00'
++HEX64 = re.compile(r'^[0-9a-f]{64}$')
++PROTOCOL = 'Equal3-root-rotation-v0718'
++MAX_AUTH_AGE = 300
++
++
++def fingerprint(pub):
++    if not isinstance(pub, Ed25519PublicKey):
++        raise ValueError('an Ed25519 public key is required')
++    return hashlib.sha256(pub.public_bytes(serialization.Encoding.Raw,
++                                           serialization.PublicFormat.Raw)).hexdigest()
++
++
++def statement(*, deployment_id, store_id, root_fingerprint, from_fingerprint,
++              to_fingerprint, from_epoch, to_epoch, issued_unix, expires_unix):
++    """Exact canonical authorization schema, with no untrusted extension keys."""
++    if type(deployment_id) is not str or DEPLOY.fullmatch(deployment_id) is None:
++        raise ValueError('invalid deployment')
++    for name, value in {'store_id':store_id,'root_fingerprint':root_fingerprint,
++                        'from_fingerprint':from_fingerprint,'to_fingerprint':to_fingerprint}.items():
++        size=32 if name=='store_id' else 64
++        if type(value) is not str or len(value)!=size or any(c not in '0123456789abcdef' for c in value):
++            raise ValueError('noncanonical '+name)
++    if type(from_epoch) is not int or type(to_epoch) is not int or not 0<=from_epoch<(1<<63)-1 or to_epoch!=from_epoch+1:
++        raise ValueError('nonconsecutive epoch')
++    if type(issued_unix) is not int or type(expires_unix) is not int or issued_unix<0 or not 1<=expires_unix-issued_unix<=MAX_AUTH_AGE:
++        raise ValueError('invalid authorization lifetime')
++    if from_fingerprint==to_fingerprint:
++        raise ValueError('identity must actually change')
++    return dict(protocol=PROTOCOL,deployment_id=deployment_id,store_id=store_id,
++                root_fingerprint=root_fingerprint,from_fingerprint=from_fingerprint,
++                to_fingerprint=to_fingerprint,from_epoch=from_epoch,to_epoch=to_epoch,
++                issued_unix=issued_unix,expires_unix=expires_unix)
++
++
++def sign_rotation(root_private_key:Ed25519PrivateKey, *, store_id, deployment_id,
++                  from_key, to_key, from_epoch, now=None, lifetime_seconds=120):
++    """OFFLINE TEST HELPER: the production root signer MUST be externally operated."""
++    if not isinstance(root_private_key,Ed25519PrivateKey):
++        raise TypeError('root private key required')
++    if now is None: now=int(time.time())
++    body=statement(deployment_id=deployment_id,store_id=store_id,
++        root_fingerprint=fingerprint(root_private_key.public_key()),
++        from_fingerprint=fingerprint(from_key),to_fingerprint=fingerprint(to_key),
++        from_epoch=from_epoch,to_epoch=from_epoch+1,
++        issued_unix=now,expires_unix=now+lifetime_seconds)
++    return {'statement':body,
++            'signature':root_private_key.sign(ROOT_DOMAIN+_canonical(body)).hex()}
++
++
++def verify_rotation(auth, *, root_public_key, expected, now=None):
++    if type(auth) is not dict or set(auth)!={'statement','signature'} or type(auth['statement']) is not dict:
++        raise ReviewDenied('malformed rotation authorization')
++    body=auth['statement']
++    if set(body)!=set(expected) or body!=expected:
++        raise ReviewDenied('rotation authorization identity/epoch mismatch')
++    try:
++        statement(**{k:v for k,v in body.items() if k!='protocol'})
++    except (ValueError,TypeError) as exc:
++        raise ReviewDenied('noncanonical rotation authorization') from exc
++    if body['protocol']!=PROTOCOL:
++        raise ReviewDenied('wrong rotation protocol')
++    if now is None: now=int(time.time())
++    if type(now) is not int or not body['issued_unix']<=now<=body['expires_unix']:
++        raise ReviewDenied('rotation authorization expired/not yet valid')
++    sig=auth['signature']
++    if type(sig) is not str or len(sig)!=128 or any(c not in '0123456789abcdef' for c in sig):
++        raise ReviewDenied('bad rotation signature encoding')
++    try:
++        root_public_key.verify(bytes.fromhex(sig),ROOT_DOMAIN+_canonical(body))
++    except (InvalidSignature,ValueError,TypeError) as exc:
++        raise ReviewDenied('invalid independent root signature') from exc
++
++
++def root_record(*, root_key, attester_key, deployment_id, store_id, epoch):
++    if type(epoch) is not int or epoch<0 or epoch>=(1<<63):
++        raise ValueError('bad epoch')
++    return _canonical({'protocol':'Equal3-root-binding-v0718',
++                       'root_fingerprint':fingerprint(root_key),
++                       'attester_fingerprint':fingerprint(attester_key),
++                       'deployment_id':deployment_id,'store_id':store_id,
++                       'epoch':epoch})
++
++
++def root_seal(seal_key,record):
++    return hmac.new(seal_key,ROOT_SEAL_DOMAIN+record,hashlib.sha256).digest()
++
++
++class RootControlledCASAnchor(EvidenceRequiredCASAnchor):
++    """Optional v0718 strict authority, not a production remote trust service.
++
++    min_epoch MUST be supplied by the caller's separately provisioned/trusted
++    epoch source at each restart. Setting it to zero each time is insecure.
++    """
++    def __init__(self, db_path, *, reviewer_key, seal_key,attester_public_key,
++                 deployment_id, root_public_key, min_epoch):
++        fingerprint(root_public_key)
++        if fingerprint(root_public_key)==fingerprint(attester_public_key):
++            raise ValueError('root and attester key roles must be distinct')
++        if type(min_epoch) is not int or not 0<=min_epoch<(1<<63):
++            raise ValueError('external minimum epoch must be explicit')
++        self._root_public_key=root_public_key
++        self._min_epoch=min_epoch
++        super().__init__(db_path,reviewer_key=reviewer_key,seal_key=seal_key,
++                         attester_public_key=attester_public_key,deployment_id=deployment_id)
++
++    @classmethod
++    def bootstrap(cls, db_path, position, *, reviewer_key, seal_key,
++                  attester_public_key, deployment_id,root_public_key,min_epoch=0):
++        if type(min_epoch) is not int or min_epoch!=0:
++            raise ValueError('genesis must initialize at epoch zero')
++        fingerprint(root_public_key)
++        if fingerprint(root_public_key)==fingerprint(attester_public_key):
++            raise ValueError('root and attester key roles must be distinct')
++        base=EvidenceRequiredCASAnchor.bootstrap(db_path,position,
++            reviewer_key=reviewer_key,seal_key=seal_key,
++            attester_public_key=attester_public_key,deployment_id=deployment_id)
++        blob=root_record(root_key=root_public_key,attester_key=attester_public_key,
++                         deployment_id=deployment_id,store_id=position.store_id,epoch=0)
++        with base._db() as db:
++            db.execute('BEGIN IMMEDIATE')
++            try:
++                db.execute('CREATE TABLE root_binding(id INTEGER PRIMARY KEY CHECK(id=1),'
++                           'binding BLOB NOT NULL, seal BLOB NOT NULL)')
++                db.execute('INSERT INTO root_binding(id,binding,seal) VALUES(1,?,?)',
++                           (blob,root_seal(seal_key,blob)))
++                db.commit()
++            except BaseException:
++                db.rollback()
++                raise
++        return cls(db_path,reviewer_key=reviewer_key,seal_key=seal_key,
++                   attester_public_key=attester_public_key,
++                   deployment_id=deployment_id,root_public_key=root_public_key,min_epoch=0)
++
++    def _load_root(self, db, status):
++        try:
++            rows=db.execute('SELECT id,binding,seal FROM root_binding LIMIT 2').fetchall()
++        except sqlite3.DatabaseError as exc:
++            raise AnchorHold('unbound legacy root trust: offline migration required') from exc
++        if len(rows)!=1 or rows[0][0]!=1:
++            raise AnchorHold('missing or duplicate root trust binding; HOLD')
++        _,blob,seal=rows[0]
++        if type(blob) is not bytes or type(seal) is not bytes or len(seal)!=32 or not hmac.compare_digest(seal,root_seal(self._seal_key,blob)):
++            raise AnchorHold('invalid root trust binding seal; HOLD')
++        try:
++            from anchor_wire import unique_json
++            policy=unique_json(blob)
++            if type(policy) is not dict or set(policy)!={'protocol','root_fingerprint','attester_fingerprint','deployment_id','store_id','epoch'}:
++                raise ValueError('malformed root binding')
++            epoch=policy['epoch']
++            if type(epoch) is not int or not 0<=epoch<(1<<63): raise ValueError('invalid epoch')
++            expected=root_record(root_key=self._root_public_key,attester_key=self._attester_public_key,
++                 deployment_id=self._deployment_id,store_id=status.committed.store_id,epoch=epoch)
++            if not hmac.compare_digest(blob,expected):raise ValueError('root/attester trust mismatch')
++        except (ValueError,TypeError,KeyError) as exc:
++            raise AnchorHold('invalid bound root trust identity/epoch; HOLD') from exc
++        if epoch<self._min_epoch:
++            raise AnchorHold('anchor trust epoch rollback below trusted floor; HOLD')
++        return epoch
++
++    def _load(self,db):
++        state=super()._load(db)
++        self._load_root(db,state)
++        return state
++
++    def rotate_attester(self, *, new_attester_public_key, authorization, now=None):
++        """Transactional root-signed single-step key rotation. No pending intent.
++
++        An operator must independently publish the new minimum epoch BEFORE
++        relying on rollback rejection after restart. This function does not
++        modify a remote epoch registry, and makes no antirollback claim.
++        """
++        fingerprint(new_attester_public_key)
++        if fingerprint(new_attester_public_key)==fingerprint(self._root_public_key):
++            raise ReviewDenied('attester cannot be root key')
++        if now is None:now=int(time.time())
++        with self._db() as db:
++            db.execute('BEGIN IMMEDIATE')
++            try:
++                status=self._load(db)
++                if status.pending is not None:
++                    raise AnchorHold('rotation forbidden while commit intent pending')
++                epoch=self._load_root(db,status)
++                expected=statement(store_id=status.committed.store_id,
++                    deployment_id=self._deployment_id,
++                    root_fingerprint=fingerprint(self._root_public_key),
++                    from_fingerprint=fingerprint(self._attester_public_key),
++                    to_fingerprint=fingerprint(new_attester_public_key),
++                    from_epoch=epoch,to_epoch=epoch+1,
++                    issued_unix=authorization.get('statement',{}).get('issued_unix') if type(authorization) is dict and type(authorization.get('statement')) is dict else None,
++                    expires_unix=authorization.get('statement',{}).get('expires_unix') if type(authorization) is dict and type(authorization.get('statement')) is dict else None)
++                verify_rotation(authorization,root_public_key=self._root_public_key,expected=expected,now=now)
++                next_policy=_attester_policy(pubkey=new_attester_public_key,
++                       deployment_id=self._deployment_id,store_id=status.committed.store_id)
++                next_root=root_record(root_key=self._root_public_key,
++                       attester_key=new_attester_public_key,
++                       deployment_id=self._deployment_id,store_id=status.committed.store_id,epoch=epoch+1)
++                db.execute('UPDATE trust_binding SET policy=?, seal=? WHERE id=1',
++                           (next_policy,_policy_seal(self._seal_key,next_policy)))
++                db.execute('UPDATE root_binding SET binding=?, seal=? WHERE id=1',
++                           (next_root,root_seal(self._seal_key,next_root)))
++                db.commit()
++            except BaseException:
++                db.rollback()
++                raise
++        self._attester_public_key=new_attester_public_key
++        self._min_epoch=max(self._min_epoch,epoch+1)
++        return epoch+1
+--- /dev/null
++++ v0718/test_root_rotation_v0718.py
+@@ -0,0 +1,233 @@
++"""Root authorization, replay, downgrade and rollback falsification tests."""
++import json
++import hmac
++import hashlib
++import sqlite3
++import shutil
++import tempfile
++import time
++import unittest
++from contextlib import closing
++from pathlib import Path
++from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
++from anchor_protocol import AnchorHold, ReviewDenied, Intent, _review_message, position_for_genesis
++from state_store import StateStore, prepare_update
++from commit_evidence_v0716 import EvidenceRequiredCASAnchor, issue_observation
++from trust_rotation_v0718 import (RootControlledCASAnchor, sign_rotation, fingerprint,
++                                  verify_rotation,statement)
++
++STOREKEY=b'K'*32;REVIEW=b'R'*32;SEAL=b'S'*32
++DEPLOY='deployment-main'
++class RootRotationTests(unittest.TestCase):
++    def setUp(self):
++        t=tempfile.TemporaryDirectory();self.addCleanup(t.cleanup)
++        self.d=Path(t.name);self.store=StateStore.create(self.d/'s.db',key=STOREKEY,initial=b'zero',journal_mode='DELETE')
++        self.a_dir=self.d/'authority';self.a_dir.mkdir(mode=0o700)
++        self.anchor_path=self.a_dir/'a.db'
++        self.root_private=Ed25519PrivateKey.generate();self.old=Ed25519PrivateKey.generate();self.new=Ed25519PrivateKey.generate();self.rogue=Ed25519PrivateKey.generate()
++        self.a=RootControlledCASAnchor.bootstrap(self.anchor_path,position_for_genesis(self.store),reviewer_key=REVIEW,seal_key=SEAL,
++                   root_public_key=self.root_private.public_key(),attester_public_key=self.old.public_key(),deployment_id=DEPLOY)
++    def reopen(self,att=None,root=None,floor=0):
++        return RootControlledCASAnchor(self.anchor_path,reviewer_key=REVIEW,seal_key=SEAL,
++            root_public_key=(root or self.root_private).public_key(),attester_public_key=(att or self.old).public_key(),
++            deployment_id=DEPLOY,min_epoch=floor)
++    def authorization(self,**kw):
++        args=dict(store_id=self.store.store_id.hex() if isinstance(self.store.store_id,bytes) else self.store.store_id,
++                  deployment_id=DEPLOY,from_key=self.old.public_key(),to_key=self.new.public_key(),from_epoch=0)
++        args.update(kw);return sign_rotation(self.root_private,**args)
++    def mutate(self,sql,params=()):
++        with closing(sqlite3.connect(self.anchor_path)) as db:
++            db.execute(sql,params);db.commit()
++    def test_genesis_pin_and_restart(self):
++        self.assertEqual(self.reopen().status().committed.version,0)
++        with self.assertRaises(AnchorHold):self.reopen(root=self.rogue)
++    def test_reject_reusing_attester_as_root(self):
++        with self.assertRaises((AnchorHold,ValueError)):self.reopen(root=self.old)
++    def test_rotation_authorized_and_old_key_denied(self):
++        self.assertEqual(self.a.rotate_attester(new_attester_public_key=self.new.public_key(),authorization=self.authorization()),1)
++        self.assertEqual(self.reopen(att=self.new,floor=1).status().committed.version,0)
++        with self.assertRaises(AnchorHold):self.reopen(att=self.old)
++        self.assertEqual(self.a.status().committed.version,0)
++    def test_old_key_cannot_sign_post_rotation_commit(self):
++        self.a.rotate_attester(new_attester_public_key=self.new.public_key(),authorization=self.authorization())
++        rid=b'Q'*16;proposal,_=prepare_update(self.store,b'next',request_id=rid)
++        info,s=self.store.read_verified()
++        intent=Intent(info['store_id'],s.version,s.digest.hex(),1,hashlib.sha256(b'next').hexdigest(),rid.hex(),hashlib.sha256(proposal).hexdigest())
++        self.a.prepare(intent);self.store.apply(proposal)
++        token=hmac.new(REVIEW,_review_message(intent,'FINALIZE_COMMIT'),hashlib.sha256).digest()
++        ev=issue_observation(store=self.store,anchor=self.a,intent=intent,decision='FINALIZE_COMMIT',deployment_id=DEPLOY,signing_key=self.old)
++        with self.assertRaises(ReviewDenied):self.a.adjudicate(intent,'FINALIZE_COMMIT',token,evidence=ev)
++        ev=issue_observation(store=self.store,anchor=self.a,intent=intent,decision='FINALIZE_COMMIT',deployment_id=DEPLOY,signing_key=self.new)
++        self.a.adjudicate(intent,'FINALIZE_COMMIT',token,evidence=ev)
++        self.assertEqual(self.a.status().committed.version,1)
++    def test_rotation_requires_true_root_signature(self):
++        auth=self.authorization();auth['signature']='0'*128
++        with self.assertRaises(ReviewDenied):self.a.rotate_attester(new_attester_public_key=self.new.public_key(),authorization=auth)
++        self.assertEqual(self.reopen().status().committed.version,0)
++    def test_reject_wrong_root_surety(self):
++        auth=sign_rotation(self.rogue,store_id=self.store.store_id.hex() if isinstance(self.store.store_id,bytes) else self.store.store_id,deployment_id=DEPLOY,
++               from_key=self.old.public_key(),to_key=self.new.public_key(),from_epoch=0)
++        with self.assertRaises(ReviewDenied):self.a.rotate_attester(new_attester_public_key=self.new.public_key(),authorization=auth)
++    def test_reject_expired(self):
++        auth=self.authorization(now=int(time.time())-500)
++        with self.assertRaises(ReviewDenied):self.a.rotate_attester(new_attester_public_key=self.new.public_key(),authorization=auth)
++    def test_reject_future(self):
++        auth=self.authorization(now=int(time.time())+300)
++        with self.assertRaises(ReviewDenied):self.a.rotate_attester(new_attester_public_key=self.new.public_key(),authorization=auth)
++    def test_reject_wrong_attester_target(self):
++        auth=self.authorization(to_key=self.rogue.public_key())
++        with self.assertRaises(ReviewDenied):self.a.rotate_attester(new_attester_public_key=self.new.public_key(),authorization=auth)
++    def test_reject_wrong_deployment(self):
++        auth=self.authorization(deployment_id='other')
++        with self.assertRaises(ReviewDenied):self.a.rotate_attester(new_attester_public_key=self.new.public_key(),authorization=auth)
++    def test_reject_epoch_jump(self):
++        auth=self.authorization(from_epoch=2)
++        with self.assertRaises(ReviewDenied):self.a.rotate_attester(new_attester_public_key=self.new.public_key(),authorization=auth)
++    def test_pending_commit_blocks_rotation(self):
++        info,s=self.store.read_verified();rid=b'P'*16;proposal,_=prepare_update(self.store,b'next',request_id=rid)
++        i=Intent(info['store_id'],s.version,s.digest.hex(),1,hashlib.sha256(b'next').hexdigest(),rid.hex(),hashlib.sha256(proposal).hexdigest())
++        self.a.prepare(i)
++        with self.assertRaises(AnchorHold):self.a.rotate_attester(new_attester_public_key=self.new.public_key(),authorization=self.authorization())
++    def test_second_replay_of_signed_rotation_rejected(self):
++        auth=self.authorization();self.a.rotate_attester(new_attester_public_key=self.new.public_key(),authorization=auth)
++        with self.assertRaises((ReviewDenied,ValueError)):
++            self.a.rotate_attester(new_attester_public_key=self.new.public_key(),authorization=auth)
++    def test_root_binding_mutation_detected(self):
++        self.mutate('UPDATE root_binding SET binding=? WHERE id=1',(b'{}',))
++        with self.assertRaises(AnchorHold):self.a.status()
++    def test_root_binding_deletion_detected(self):
++        self.mutate('DELETE FROM root_binding')
++        with self.assertRaises(AnchorHold):self.a.status()
++    def test_extra_root_binding_detected(self):
++        with closing(sqlite3.connect(self.anchor_path)) as db:
++            row=db.execute('SELECT binding,seal FROM root_binding').fetchone()
++            db.execute('DROP TABLE root_binding');db.execute('CREATE TABLE root_binding(id INTEGER PRIMARY KEY,binding BLOB,seal BLOB)')
++            db.execute('INSERT INTO root_binding VALUES(1,?,?)',row)
++            db.execute('INSERT INTO root_binding VALUES(2,?,?)',(b'fake',b'0'*32));db.commit()
++        with self.assertRaises(AnchorHold):self.a.status()
++    def test_external_epoch_floor_rejects_rollback(self):
++        snap=self.d/'old-anchor.db';shutil.copyfile(self.anchor_path,snap)
++        self.a.rotate_attester(new_attester_public_key=self.new.public_key(),authorization=self.authorization())
++        shutil.copyfile(snap,self.anchor_path)
++        with self.assertRaisesRegex(AnchorHold,'epoch rollback'):
++            self.reopen(floor=1)
++        # A caller that irresponsibly resets the trusted epoch to zero can
++        # still accept an old state. An external floor is a non-negotiable P0.
++        self.assertEqual(self.reopen(floor=0).status().committed.version,0)
++    def test_min_epoch_cannot_be_omitted(self):
++        with self.assertRaises(TypeError):RootControlledCASAnchor(self.anchor_path,reviewer_key=REVIEW,
++               seal_key=SEAL,root_public_key=self.root_private.public_key(),attester_public_key=self.old.public_key(),deployment_id=DEPLOY)
++    def test_old_v0717_authority_not_auto_migrated(self):
++        olddir=self.d/'old';olddir.mkdir(mode=0o700)
++        old=EvidenceRequiredCASAnchor.bootstrap(olddir/'a.db',position_for_genesis(self.store),reviewer_key=REVIEW,
++                       seal_key=SEAL,attester_public_key=self.old.public_key(),deployment_id=DEPLOY)
++        with self.assertRaisesRegex(AnchorHold,'unbound legacy root'):
++            RootControlledCASAnchor(olddir/'a.db',reviewer_key=REVIEW,seal_key=SEAL,attester_public_key=self.old.public_key(),
++                                    deployment_id=DEPLOY,root_public_key=self.root_private.public_key(),min_epoch=0)
++    def test_root_key_cannot_double_as_attester(self):
++        other=self.d/'newroot';other.mkdir(mode=0o700)
++        with self.assertRaisesRegex(ValueError,'must be distinct'):
++            RootControlledCASAnchor.bootstrap(other/'a.db',position_for_genesis(self.store),
++                  reviewer_key=REVIEW,seal_key=SEAL,
++                  root_public_key=self.old.public_key(),
++                  attester_public_key=self.old.public_key(),deployment_id=DEPLOY)
++        self.assertFalse((other/'a.db').exists())
++
++    def test_rotation_cannot_install_root_as_attester(self):
++        with self.assertRaises(ReviewDenied):
++            self.a.rotate_attester(new_attester_public_key=self.root_private.public_key(),
++                authorization=self.authorization(to_key=self.root_private.public_key()))
++        self.assertEqual(self.a.status().committed.version,0)
++
++    def test_service_requires_rooted_authority_by_default(self):
++        from anchor_wire import serve
++        sock=self.d/'never.sock'
++        with self.assertRaisesRegex(AnchorHold,'root authorization missing'):
++            serve(self.anchor_path,sock,writer_key=b'W'*32,reviewer_key=REVIEW,
++                  seal_key=SEAL,writer_uid=1001,attester_public_key=self.old.public_key(),deployment_id=DEPLOY)
++        self.assertFalse(sock.exists())
++
++    def test_service_rejects_unsourced_epoch_floor(self):
++        from anchor_wire import serve
++        sock=self.d/'never.sock'
++        with self.assertRaisesRegex(AnchorHold,'minimum epoch required'):
++            serve(self.anchor_path,sock,writer_key=b'W'*32,reviewer_key=REVIEW,
++                  seal_key=SEAL,writer_uid=1001,attester_public_key=self.old.public_key(),
++                  deployment_id=DEPLOY,root_public_key=self.root_private.public_key())
++        self.assertFalse(sock.exists())
++
++    def test_signed_rotation_cannot_override_foreign_root(self):
++        auth=self.authorization()
++        with self.assertRaises(AnchorHold):
++            self.reopen(root=self.rogue)
++        with self.assertRaises(ReviewDenied):
++            from trust_rotation_v0718 import verify_rotation
++            verify_rotation(auth,root_public_key=self.rogue.public_key(),
++                            expected=auth['statement'])
++
++    def test_transactional_rotation_rolls_back_when_sql_update_fails(self):
++        # An injected SQLite abort between policy updates must leave both keys intact.
++        with closing(sqlite3.connect(self.anchor_path)) as db:
++            db.execute("CREATE TRIGGER rotation_fail BEFORE UPDATE ON root_binding "
++                       "BEGIN SELECT RAISE(ABORT,'fault injection'); END")
++            db.commit()
++        with self.assertRaises(sqlite3.DatabaseError):
++            self.a.rotate_attester(new_attester_public_key=self.new.public_key(),
++                                   authorization=self.authorization())
++        self.assertEqual(self.reopen().status().committed.version,0)
++        with closing(sqlite3.connect(self.anchor_path)) as db:
++            db.execute('DROP TRIGGER rotation_fail');db.commit()
++        self.a.rotate_attester(new_attester_public_key=self.new.public_key(),
++                               authorization=self.authorization())
++        self.assertEqual(self.reopen(att=self.new,floor=1).status().committed.version,0)
++
++    def test_rpc_rooted_anchor_status_after_reopen(self):
++        import os,threading
++        from anchor_wire import _UnixAuthority,_Handler,RPCAnchor
++        self.a.rotate_attester(new_attester_public_key=self.new.public_key(),
++                               authorization=self.authorization())
++        rooted=self.reopen(att=self.new,floor=1)
++        sock=str(self.d/'local.sock')
++        with _UnixAuthority(sock,_Handler) as srv:
++            srv.backend=rooted;srv.writer_uid=os.geteuid();srv.writer_key=b'W'*32
++            th=threading.Thread(target=srv.serve_forever,
++                                kwargs={'poll_interval':.02},daemon=True)
++            th.start()
++            try:
++                client=RPCAnchor(sock,writer_key=b'W'*32)
++                self.assertEqual(client.status().committed.version,0)
++            finally:
++                srv.shutdown();th.join(3)
++
++    def test_negative_first_seal_key_only_cannot_rebind_rooted_attester(self):
++        # Baseline v0717 HMAC policy: authority seal-key holder can replace
++        # signer binding with an arbitrary new Ed25519 key and restart.
++        from commit_evidence_v0716 import _attester_policy,_policy_seal
++        olddir=self.d/'legacy2';olddir.mkdir(mode=0o700)
++        olddb=olddir/'a.db'
++        EvidenceRequiredCASAnchor.bootstrap(olddb,position_for_genesis(self.store),
++            reviewer_key=REVIEW,seal_key=SEAL,
++            attester_public_key=self.old.public_key(),deployment_id=DEPLOY)
++        fake_policy=_attester_policy(pubkey=self.rogue.public_key(),
++               deployment_id=DEPLOY,store_id=self.store.store_id.hex() if isinstance(self.store.store_id,bytes) else self.store.store_id)
++        with closing(sqlite3.connect(olddb)) as db:
++            db.execute('UPDATE trust_binding SET policy=?,seal=? WHERE id=1',
++                       (fake_policy,_policy_seal(SEAL,fake_policy)));db.commit()
++        # Legacy accepts the forged trust if the seal key is compromised.
++        baseline=EvidenceRequiredCASAnchor(olddb,reviewer_key=REVIEW,seal_key=SEAL,
++                   attester_public_key=self.rogue.public_key(),deployment_id=DEPLOY)
++        self.assertEqual(baseline.status().committed.version,0)
++        # The rooted variant rejects the same policy replacement because it
++        # has a separately persisted root-owned attester fingerprint.
++        with closing(sqlite3.connect(self.anchor_path)) as db:
++            db.execute('UPDATE trust_binding SET policy=?,seal=? WHERE id=1',
++                       (fake_policy,_policy_seal(SEAL,fake_policy)));db.commit()
++        with self.assertRaises(AnchorHold):
++            self.reopen(att=self.rogue)
++        with self.assertRaises(AnchorHold):self.a.status()
++
++    def test_policy_divergence_detected(self):
++        policy=b'{}';self.mutate('UPDATE trust_binding SET policy=? WHERE id=1',(policy,))
++        with self.assertRaises(AnchorHold):self.a.status()
++
++if __name__=='__main__':unittest.main()
+--- /dev/null
++++ v0718/run_v0718_suites.py
+@@ -0,0 +1,42 @@
++"""Reproducible source-tree regression lanes; isolate multiprocessing lifetime."""
++from pathlib import Path
++import os,subprocess,sys,time,re,json
++root=Path(__file__).resolve().parent
++out=root/'EVIDENCE_V0718';out.mkdir(exist_ok=True)
++groups={
++ 'anchor':['test_anchor_protocol','test_anchor_v077','test_anchor_v078','test_anchor_v079','test_anchor_wire'],
++ 'equal':['test_equal3','test_extensions','test_fault_lab','test_guarded_store','test_release_preflight_v078','test_v0713_rollback'],
++ 'store':['test_store','test_v07','test_v071','test_v0710_security','test_v0712_integrity','test_v074_hardening','test_witness'],
++ 'runtime':['test_runtime_gate_v0711','test_sqlite_build_v0711'],
++ 'writer':['test_writer_service_v0714'],
++ 'coordinator':['test_anchored_writer_v0715'],
++ 'attested':['test_attested_commit_v0716'],
++ 'policy':['test_attester_policy_v0717'],
++ 'root_rotation':['test_root_rotation_v0718'],
++}
++summary={};success=True
++for name,group in groups.items():
++ print('START',name,flush=True)
++ started=time.monotonic()
++ try:
++  result=subprocess.run([sys.executable,'-W','error::ResourceWarning','-m','unittest','-q',*group],
++      cwd=root,env={**os.environ,'PYTHONDONTWRITEBYTECODE':'1'},capture_output=True,text=True,timeout=130)
++  log=result.stdout+result.stderr
++  match=re.search(r'Ran (\d+) tests? in ([\d.]+)s',log)
++  ispass=result.returncode==0 and match is not None
++  summary[name]={'status':'PASS' if ispass else 'FAIL','count':int(match.group(1)) if match else None,'time_s':round(time.monotonic()-started,3),'returncode':result.returncode}
++ except subprocess.TimeoutExpired as exc:
++  log=(exc.stdout.decode(errors='replace') if isinstance(exc.stdout,bytes) else (exc.stdout or ''))+'\nTIMEOUT'
++  summary[name]={'status':'TIMEOUT','count':None,'time_s':round(time.monotonic()-started,3)}
++  ispass=False
++ (out/(name+'.log')).write_text(log)
++ print(name,summary[name],flush=True)
++ if not ispass:
++  success=False
++  print('FAIL TAIL',log[-2000:],flush=True)
++  break
++summary['total']=sum(x.get('count') or 0 for x in summary.values())
++summary['all_pass']=success
++(out/'suite_summary.json').write_text(json.dumps(summary,indent=2)+'\n')
++print('SUMMARY',json.dumps(summary),flush=True)
++sys.exit(0 if success else 1)
+--- /dev/null
++++ v0718/rotate_attester_v0718.py
+@@ -0,0 +1,44 @@
++"""Offline research operator command: consume an independently issued root signature.
++
++NEVER use on live/valuable data. Stop the authority daemon first. A real deployment
++must use an external root signer AND independently monotonically recorded epoch.
++"""
++from __future__ import annotations
++import argparse
++import json
++from pathlib import Path
++from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
++from anchor_wire import read_credential, unique_json
++from writer_service_v0714 import _root_provisioned_public_key
++from trust_rotation_v0718 import RootControlledCASAnchor
++
++
++def main():
++    ap=argparse.ArgumentParser(description='Equal3 v0718 offline root-authorized attester rotation (research only)')
++    for field in ('db','reviewer-key-file','seal-key-file','old-attester-public-file',
++                  'new-attester-public-file','root-public-file','deployment-id','authorization-file'):
++        ap.add_argument('--'+field,required=True)
++    ap.add_argument('--trusted-min-epoch',type=int,required=True)
++    ap.add_argument('--research-offline-apply',action='store_true',
++                    help='Explicitly authorize offline mutation, no production guarantee')
++    args=ap.parse_args()
++    if not args.research_offline_apply:
++        ap.error('fail closed: --research-offline-apply must be explicitly supplied')
++    def pub(filename):
++        return Ed25519PublicKey.from_public_bytes(_root_provisioned_public_key(filename))
++    path=Path(args.authorization_file)
++    if path.is_symlink() or not path.is_file() or path.stat().st_size>4096:
++        ap.error('authorization file must be a small regular non-symlink file')
++    evidence=unique_json(path.read_bytes())
++    a=RootControlledCASAnchor(args.db,reviewer_key=read_credential(args.reviewer_key_file),
++          seal_key=read_credential(args.seal_key_file),
++          attester_public_key=pub(args.old_attester_public_file),
++          deployment_id=args.deployment_id,root_public_key=pub(args.root_public_file),
++          min_epoch=args.trusted_min_epoch)
++    epoch=a.rotate_attester(new_attester_public_key=pub(args.new_attester_public_file),
++                            authorization=evidence)
++    print(json.dumps({'research_only':True,'new_epoch':epoch,
++                      'P0':'Independent monotonic floor publication and operator review REQUIRED'}))
++
++
++if __name__=='__main__': main()
+--- /dev/null
++++ v0718/bench_root_v0718.py
+@@ -0,0 +1,48 @@
++"""SHA-bound, separate-interpreter ABBA baseline against current root-controlled CAS status.
++Measures only local status (no network, no disk power failure, no HSM).
++"""
++import csv,hashlib,json,os,pathlib,statistics,subprocess,sys
++ROOT=pathlib.Path(__file__).resolve().parent
++BASE=pathlib.Path('/mnt/data/equal3_v0717_review/Equal3_v0717_Research')
++O=ROOT/'EVIDENCE_V0718';O.mkdir(exist_ok=True)
++SRC=r'''
++import tempfile,pathlib,time,json,statistics
++from state_store import StateStore
++from anchor_protocol import position_for_genesis
++from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
++from commit_evidence_v0716 import EvidenceRequiredCASAnchor
++from __MODULE__ import __CLASS__
++with tempfile.TemporaryDirectory() as folder:
++ p=pathlib.Path(folder);a=p/'authority';a.mkdir(mode=0o700)
++ s=StateStore.create(p/'state.db',key=b'K'*32,initial=b'init',journal_mode='DELETE')
++ old=Ed25519PrivateKey.generate()
++ if '__MODULE__' == 'trust_rotation_v0718':
++  root=Ed25519PrivateKey.generate()
++  backend=RootControlledCASAnchor.bootstrap(a/'a.db',position_for_genesis(s),reviewer_key=b'R'*32,seal_key=b'S'*32,
++      attester_public_key=old.public_key(),deployment_id='prod-a',root_public_key=root.public_key())
++ else:
++  backend=EvidenceRequiredCASAnchor.bootstrap(a/'a.db',position_for_genesis(s),reviewer_key=b'R'*32,seal_key=b'S'*32,
++      attester_public_key=old.public_key(),deployment_id='prod-a')
++ for _ in range(40):backend.status()
++ timings=[]
++ for _ in range(400):
++  start=time.perf_counter_ns();backend.status();timings.append((time.perf_counter_ns()-start)/1e6)
++ print(json.dumps({'median_ms':statistics.median(timings),'p95_ms':sorted(timings)[int(len(timings)*.95)-1],
++                  'count':len(timings)}))
++'''
++if not BASE.is_dir():raise SystemExit('baseline source path absent; cannot perform verified version comparison')
++rows=[]
++for roundno,(v1,v2) in enumerate([('baseline','candidate'),('candidate','baseline'),('candidate','baseline'),('baseline','candidate')],1):
++ for v in (v1,v2):
++  directory=BASE if v=='baseline' else ROOT
++  name='commit_evidence_v0716' if v=='baseline' else 'trust_rotation_v0718'
++  cls='EvidenceRequiredCASAnchor' if v=='baseline' else 'RootControlledCASAnchor'
++  code=SRC.replace('__MODULE__',name).replace('__CLASS__',cls)
++  output=subprocess.run([sys.executable,'-c',code],cwd=directory,capture_output=True,text=True,check=True,timeout=30)
++  data=json.loads(output.stdout)
++  file=directory/(name+'.py')
++  row={'round':roundno,'variant':v,'source':str(file),'sha256':hashlib.sha256(file.read_bytes()).hexdigest(),**data}
++  rows.append(row);print(row,flush=True)
++with (O/'benchmark_root_abba.csv').open('w',newline='') as f:
++ w=csv.DictWriter(f,fieldnames=rows[0].keys());w.writeheader();w.writerows(rows)
++print('RESULT',json.dumps({v:{'median_of_round_medians_ms':statistics.median([x['median_ms'] for x in rows if x['variant']==v])} for v in ('baseline','candidate')}))

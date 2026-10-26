@@ -1,0 +1,15 @@
+RUN anchor
+anchor {'tests': 91, 'status': 'PASS', 'returncode': 0, 'seconds': 37.566}
+RUN equal
+equal {'tests': 57, 'status': 'PASS', 'returncode': 0, 'seconds': 13.229}
+RUN store
+store {'tests': 96, 'status': 'PASS', 'returncode': 0, 'seconds': 21.394}
+RUN runtime
+runtime {'tests': 21, 'status': 'PASS', 'returncode': 0, 'seconds': 1.121}
+RUN protected_writer
+protected_writer {'tests': 21, 'status': 'PASS', 'returncode': 0, 'seconds': 4.472}
+RUN new_coordinated_writer
+new_coordinated_writer {'tests': 23, 'status': 'PASS', 'returncode': 0, 'seconds': 1.272}
+RUN attested_gate
+attested_gate {'tests': 24, 'status': 'PASS', 'returncode': 0, 'seconds': 1.341}
+RESULT {"anchor": {"tests": 91, "status": "PASS", "returncode": 0, "seconds": 37.566}, "equal": {"tests": 57, "status": "PASS", "returncode": 0, "seconds": 13.229}, "store": {"tests": 96, "status": "PASS", "returncode": 0, "seconds": 21.394}, "runtime": {"tests": 21, "status": "PASS", "returncode": 0, "seconds": 1.121}, "protected_writer": {"tests": 21, "status": "PASS", "returncode": 0, "seconds": 4.472}, "new_coordinated_writer": {"tests": 23, "status": "PASS", "returncode": 0, "seconds": 1.272}, "attested_gate": {"tests": 24, "status": "PASS", "returncode": 0, "seconds": 1.341}}

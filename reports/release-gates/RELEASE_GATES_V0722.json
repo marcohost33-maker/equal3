@@ -1,0 +1,7 @@
+{
+  "version":"0.7.22-research", "release":"NO_GO", "date":"2026-10-25",
+  "local_request_lineage_invariant":"PASS: negative-first source-pinned fork test",
+  "focused_29_tests":"PASS", "full_legacy_suite":"INCOMPLETE: anchor_wire multiprocess timeout",
+  "p0_open":["independent_monotone_witness","legacy_bypass_elimination","patched_sqlite_runtime","independent_observer_and_recovery","kms_keys_encryption","hardware_vfs_powerloss","privacy_regulatory_review","independent_security_review"],
+  "evidence":["EVIDENCE_V0722/test_evidence.json","EVIDENCE_V0722/focused_tests.log","EVIDENCE_V0722/ABBA_request_binding.json","EVIDENCE_V0722/source_diff.patch"]
+}

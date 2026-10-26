@@ -1,0 +1,33 @@
+{
+  "project": "=== / Equal3",
+  "version": "0.7.10-research",
+  "date": "2026-10-25",
+  "decision": "NO_GO",
+  "provenance": "local copy of audited v0.7.9 ZIP",
+  "tests": {
+    "passed": 219,
+    "failed": 0,
+    "resource_warnings_as_errors": true,
+    "new_tests": 13,
+    "runtime": "Python 3.13.5; SQLite 3.46.1"
+  },
+  "claims_confirmed": [
+    "historical HMAC-verification required for StateStore.receipt and duplicate StateStore.apply",
+    "legacy unsealed schema cannot authorize replay or receipt",
+    "loaded linked libsqlite3 .so hash and kernel-mapping inode inventoried"
+  ],
+  "infrastructure_gates_open": [
+    "approved patched SQLite loaded by every WAL client, with independent build provenance and retest",
+    "independent nonrollbackable monotonic anchor (joint rollback counterexample still succeeds)",
+    "nonprivileged persistent separated writer/anchor deployment + endpoint identity and file/ptrace checks",
+    "external commit attestation + safe recovery under actual network/service partitions",
+    "full-disk/journal/temp/backup encryption with managed separated keys",
+    "true VFS/power loss fault lab",
+    "external independent security/privacy approval and compliance matrix signoff",
+    "linear full history verification and authenticated checkpoint design",
+    "path TOCTOU and per-host OS isolation hardening"
+  ],
+  "manifest_statement": "SHA256 manifest is unkeyed and NOT a signed supply-chain attestation",
+  "no_github_push": true,
+  "no_production_deployment": true
+}

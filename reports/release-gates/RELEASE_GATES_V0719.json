@@ -1,0 +1,8 @@
+{
+  "project": "Equal3", "version": "0.7.19", "classification": "RESEARCH",
+  "release": "NO_GO",
+  "implemented_research": ["fresh_challenge_signed_epoch_witness", "witness_root_signed_epoch_cas", "strict_epoch_attester_match", "anchor_service_live_witness_startup_gate", "fail_closed_outage_and_replay"],
+  "still_blocking": ["independent_witness_rollback_domain", "commit_version_digest_monotonic_registry", "root_and_witness_independent_key_governance", "remote_mTLS_and_identity", "patched_provenance_checked_sqlite", "atomicity_crash_recovery_evidence", "encryption_and_key_rotation", "power_loss_fault_lab", "independent_security_privacy_review"],
+  "known_counterexamples": ["coherent_joint_rollback_including_witness", "same_epoch_state_store_anchor_rollback"],
+  "github_writes": false
+}

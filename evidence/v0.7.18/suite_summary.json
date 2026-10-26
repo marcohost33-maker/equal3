@@ -1,0 +1,58 @@
+{
+  "anchor": {
+    "status": "PASS",
+    "count": 91,
+    "time_s": 35.011,
+    "returncode": 0
+  },
+  "equal": {
+    "status": "PASS",
+    "count": 57,
+    "time_s": 14.548,
+    "returncode": 0
+  },
+  "store": {
+    "status": "PASS",
+    "count": 96,
+    "time_s": 21.215,
+    "returncode": 0
+  },
+  "runtime": {
+    "status": "PASS",
+    "count": 21,
+    "time_s": 0.76,
+    "returncode": 0
+  },
+  "writer": {
+    "status": "PASS",
+    "count": 21,
+    "time_s": 3.413,
+    "returncode": 0
+  },
+  "coordinator": {
+    "status": "PASS",
+    "count": 23,
+    "time_s": 1.016,
+    "returncode": 0
+  },
+  "attested": {
+    "status": "PASS",
+    "count": 24,
+    "time_s": 1.221,
+    "returncode": 0
+  },
+  "policy": {
+    "status": "PASS",
+    "count": 14,
+    "time_s": 0.845,
+    "returncode": 0
+  },
+  "root_rotation": {
+    "status": "PASS",
+    "count": 28,
+    "time_s": 1.173,
+    "returncode": 0
+  },
+  "total": 375,
+  "all_pass": true
+}

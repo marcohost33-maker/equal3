@@ -1,0 +1,4 @@
+{'payload_bytes': 1024, 'method': 'memory', 'n': 48, 'median_total_ms': 4.9093, 'p95_total_ms': 5.5068, 'median_apply_ms': 3.7233, 'max_total_ms': 6.0491}
+{'payload_bytes': 1024, 'method': 'rpc', 'n': 48, 'median_total_ms': 16.4893, 'p95_total_ms': 20.8898, 'median_apply_ms': 9.4841, 'max_total_ms': 31.6057}
+{'payload_bytes': 65536, 'method': 'memory', 'n': 48, 'median_total_ms': 6.4077, 'p95_total_ms': 7.8793, 'median_apply_ms': 5.1108, 'max_total_ms': 8.7335}
+{'payload_bytes': 65536, 'method': 'rpc', 'n': 48, 'median_total_ms': 18.5293, 'p95_total_ms': 22.2, 'median_apply_ms': 11.2789, 'max_total_ms': 25.5514}

@@ -1,0 +1,24 @@
+{
+  "project": "Equal3",
+  "candidate": "v0.7.18 research",
+  "date": "2026-10-25",
+  "release": "NO_GO",
+  "implemented_research": [
+    "root-signed attester key rotation",
+    "monotonic local trust epochs with mandatory caller-provided floor",
+    "transactionally updated root and attester policy",
+    "rooted authority serve start gate",
+    "negative-first tampering and rollback tests"
+  ],
+  "P0_OPEN": [
+    "independent root provisioning",
+    "genuine independently-monotonic epoch floor",
+    "root-of-root rotation and threshold governance",
+    "observer TOCTOU and joint rollback",
+    "patched SQLite runtime",
+    "OS enforced deployment isolation",
+    "encryption+recovery+hardware crash tests",
+    "independent security and privacy review"
+  ],
+  "warning": "Caller-controlled minimum epoch and local root HMAC are not a nonrollbackable trust authority. Test bundle includes explicitly unsafe legacy research switch. SHA256 manifest is not externally signed."
+}

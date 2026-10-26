@@ -1,0 +1,23 @@
+{
+  "project": "Equal3",
+  "version": "0.7.16-research",
+  "decision": "NO_GO",
+  "as_of": "2026-10-25",
+  "tests": {
+    "full_regression": 333,
+    "new": 24,
+    "lanes": 7
+  },
+  "gates": {
+    "signed_observation_reference": "TESTED_RESEARCH",
+    "server_requires_attester_by_default": "TESTED_RESEARCH",
+    "independent_signer_and_tamperproof_commit_evidence": "OPEN",
+    "independent_monotonic_root": "OPEN",
+    "signed_runtime_and_single_writer_deployed": "OPEN",
+    "patched_SQLite_loaded": "OPEN",
+    "powerloss_faults": "OPEN",
+    "encryption_and_key_lifecycle": "OPEN",
+    "security_compliance_approval": "OPEN"
+  },
+  "known_negative": "Post-observation database rollback remains possible before finalization; signed statement is not proof of immutable durable state."
+}

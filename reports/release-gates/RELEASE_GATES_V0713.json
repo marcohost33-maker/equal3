@@ -1,0 +1,26 @@
+{
+  "project": "=== / Equal3",
+  "candidate": "0.7.13-research",
+  "as_of": "2026-10-25",
+  "decision": "NO_GO",
+  "prior_250_tests_documented": true,
+  "new_test_cases": 15,
+  "tests_complete": true,
+  "new_supported_mode": "SQLite DELETE / synchronous EXTRA for explicit StateStore only",
+  "sqlite_version_used": "3.46.1",
+  "patched_sqlite_loaded": false,
+  "security_scope": "WAL-reset avoidance only in DELETE-mode connections",
+  "blocking_p0": [
+    "patched sqlite runtime and authenticated runtime startup",
+    "OS-enforced exclusive writer",
+    "independent external anti-rollback authority",
+    "confidentiality of database/journal/backup and key lifecycle",
+    "physical/VFS fault testing",
+    "independent release and privacy signoff"
+  ],
+  "unsigned_manifest": true,
+  "candidate_tests": 265,
+  "regression_failures": 0,
+  "synthetic_new_tests": 15,
+  "baseline_tests": 250
+}

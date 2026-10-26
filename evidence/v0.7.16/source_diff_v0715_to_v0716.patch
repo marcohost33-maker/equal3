@@ -1,0 +1,671 @@
+--- v0715/anchor_wire.py
++++ v0716/anchor_wire.py
+@@ -405,8 +405,10 @@
+     def prepare(self,intent:Intent):
+         self._call('prepare',{'intent':asdict(intent)})
+ 
+-    def adjudicate(self,intent:Intent,decision:str,token:bytes):
+-        self._call('adjudicate',{'intent':asdict(intent),'decision':decision,'token':token.hex()})
++    def adjudicate(self,intent:Intent,decision:str,token:bytes,*,evidence=None):
++        data={'intent':asdict(intent),'decision':decision,'token':token.hex()}
++        if evidence is not None: data['evidence']=evidence
++        self._call('adjudicate',data)
+ 
+ 
+ class _Handler(socketserver.StreamRequestHandler):
+@@ -441,10 +443,16 @@
+                     strict_object(p,{'intent'})
+                     srv.backend.prepare(from_intent(p['intent']),nonce=frame['nonce']);answer={}
+                 elif op=='adjudicate':
+-                    strict_object(p,{'intent','decision','token'})
++                    if set(p) not in ({'intent','decision','token'}, {'intent','decision','token','evidence'}):
++                        raise WireError('noncanonical adjudication frame')
++                    strict_object(p,set(p))
+                     if type(p['token']) is not str or len(p['token'])!=64:raise WireError('bad token')
+                     token=bytes.fromhex(p['token'])
+-                    srv.backend.adjudicate(from_intent(p['intent']),p['decision'],token,nonce=frame['nonce']);answer={}
++                    if 'evidence' in p:
++                        srv.backend.adjudicate(from_intent(p['intent']),p['decision'],token,nonce=frame['nonce'],evidence=p['evidence'])
++                    else:
++                        srv.backend.adjudicate(from_intent(p['intent']),p['decision'],token,nonce=frame['nonce'])
++                    answer={}
+                 else:
+                     raise WireError('unknown operation')
+                 ok=True
+@@ -507,9 +515,19 @@
+         s.st_gid != socket_gid or stat.S_IMODE(s.st_mode) != 0o710):
+         raise PermissionError('group socket directory requires owner=anchor, group=writer and mode=0710')
+ 
+-def serve(db_path:str|Path,sock_path:str|Path,*,writer_key:bytes,reviewer_key:bytes,seal_key:bytes,writer_uid:int,research_unsafe_sqlite:bool=False,socket_gid:int|None=None):
++def serve(db_path:str|Path,sock_path:str|Path,*,writer_key:bytes,reviewer_key:bytes,seal_key:bytes,writer_uid:int,research_unsafe_sqlite:bool=False,socket_gid:int|None=None,
++          attester_public_key=None,deployment_id=None, research_unattested=False):
+     if not hasattr(socket,'SO_PEERCRED'):raise RuntimeError('SO_PEERCRED unsupported; refusing to serve')
+-    backend=PersistentCASAnchor(db_path,reviewer_key=reviewer_key,seal_key=seal_key,research_unsafe_sqlite=research_unsafe_sqlite)
++    if attester_public_key is None:
++        if research_unattested is not True:
++            raise AnchorHold('P0 signed independent commit observation missing; attested authority required')
++        backend=PersistentCASAnchor(db_path,reviewer_key=reviewer_key,seal_key=seal_key,
++                                    research_unsafe_sqlite=research_unsafe_sqlite)
++    else:
++        from commit_evidence_v0716 import EvidenceRequiredCASAnchor
++        backend=EvidenceRequiredCASAnchor(db_path,reviewer_key=reviewer_key,seal_key=seal_key,
++                                           attester_public_key=attester_public_key,
++                                           deployment_id=deployment_id)
+     sock_path=Path(sock_path).absolute()
+     _require_socket_parent(sock_path,socket_gid)
+     if os.path.lexists(sock_path):raise FileExistsError('socket path exists; no automatic unlink')
+@@ -559,10 +577,24 @@
+     ap.add_argument('--writer-uid',required=True,type=int)
+     ap.add_argument('--writer-gid',type=int,default=None,
+                     help='Optional separate writer group: socket directory must be 0710 anchor:group')
++    ap.add_argument('--attester-public-key-file',default=None,
++                    help='Root-provisioned 32-byte Ed25519 public key; mandatory except unsafe RESEARCH mode')
++    ap.add_argument('--deployment-id',default=None)
++    ap.add_argument('--allow-unattested-research-only',action='store_true')
+     cfg=ap.parse_args()
++    attester_key=None
++    if cfg.attester_public_key_file is not None:
++        # Provisioned out of band by the system operator; the client/writer
++        # must not be able to substitute the trust root.
++        from writer_service_v0714 import _root_provisioned_public_key
++        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
++        attester_key=Ed25519PublicKey.from_public_bytes(
++            _root_provisioned_public_key(cfg.attester_public_key_file))
+     serve(cfg.db,cfg.socket,writer_key=read_credential(cfg.writer_key_file),
+           reviewer_key=read_credential(cfg.reviewer_key_file),seal_key=read_credential(cfg.seal_key_file),
+           writer_uid=cfg.writer_uid,socket_gid=cfg.writer_gid,
+-          research_unsafe_sqlite=cfg.allow_unsafe_sqlite_research_only)
++          research_unsafe_sqlite=cfg.allow_unsafe_sqlite_research_only,
++          attester_public_key=attester_key,deployment_id=cfg.deployment_id,
++          research_unattested=cfg.allow_unattested_research_only)
+ 
+ if __name__=='__main__':main()
+--- v0715/anchor_protocol.py
++++ v0716/anchor_protocol.py
+@@ -248,7 +248,7 @@
+         # independent review before anchor promotion. No secret auto-advance.
+         return receipt
+ 
+-    def adjudicate(self, decision: str, token: bytes) -> Assessment:
++    def adjudicate(self, decision: str, token: bytes, *, evidence=None) -> Assessment:
+         remote=self.anchor.status()
+         if remote.pending is None:
+             raise ReviewDenied('nothing pending')
+@@ -258,7 +258,10 @@
+         if required is None or state.code!=required:
+             raise ReviewDenied('review decision inconsistent with verified SQLite state')
+         # Separate human/authority signature verified by the backend simulator.
+-        self.anchor.adjudicate(remote.pending,decision,token)
++        if evidence is None:
++            self.anchor.adjudicate(remote.pending,decision,token)
++        else:
++            self.anchor.adjudicate(remote.pending,decision,token,evidence=evidence)
+         return self.diagnose()
+ 
+ 
+--- v0715/test_anchor_wire.py
++++ v0716/test_anchor_wire.py
+@@ -47,7 +47,7 @@
+             '--writer-key-file',str(self._secret('writer.key',self.wkey)),
+             '--reviewer-key-file',str(self._secret('review.key',self.rkey)),
+             '--seal-key-file',str(self._secret('seal.key',self.skey)),
+-            '--allow-unsafe-sqlite-research-only',
++            '--allow-unsafe-sqlite-research-only','--allow-unattested-research-only',
+             '--writer-uid',str(os.getuid())],cwd=str(Path(__file__).parent),
+             stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.PIPE)
+         self.addCleanup(self.stop)
+@@ -204,7 +204,7 @@
+             '--writer-key-file',str(self._secret('writer.key',self.wkey)),
+             '--reviewer-key-file',str(self._secret('review.key',self.rkey)),
+             '--seal-key-file',str(self._secret('seal.key',self.skey)),
+-            '--allow-unsafe-sqlite-research-only',
++            '--allow-unsafe-sqlite-research-only','--allow-unattested-research-only',
+             '--writer-uid',str(os.getuid()+1000)],cwd=str(Path(__file__).parent),
+             stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+         deadline=time.monotonic()+3
+--- v0715/test_anchor_v079.py
++++ v0716/test_anchor_v079.py
+@@ -160,7 +160,8 @@
+                 '--writer-key-file',str(keys['writer']),
+                 '--reviewer-key-file',str(keys['reviewer']),
+                 '--seal-key-file',str(keys['seal']),
+-                '--writer-uid',str(nobody),'--writer-gid',str(nobody)],
++                '--writer-uid',str(nobody),'--writer-gid',str(nobody),
++                '--allow-unattested-research-only'],
+                 stdout=subprocess.DEVNULL,stderr=subprocess.PIPE)
+             try:
+                 deadline=time.monotonic()+4
+--- /dev/null
++++ v0716/commit_evidence_v0716.py
+@@ -0,0 +1,177 @@
++"""Equal3 v0.7.16: independently SIGNED observation gate (RESEARCH ONLY).
++
++An observation attests that a designated observer verified a SQLite snapshot.
++It is *not* proof of independent storage, atomic distributed commit, secure
++hardware, or non-rollbackability. The signer must be outside writer control.
++This module deliberately never exposes a writer-side reviewer signer.
++"""
++from __future__ import annotations
++from dataclasses import asdict
++import hashlib
++import json
++import re
++import secrets
++import time
++from cryptography.exceptions import InvalidSignature
++from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
++
++from anchor_protocol import AnchorHold, ReviewDenied, Intent
++from anchor_wire import PersistentCASAnchor, validate_intent
++from state_store import StateStore
++
++DOMAIN = b'Equal3/independent-commit-observation/v0716\x00'
++FIELDS = frozenset({'protocol', 'deployment_id', 'observation_id', 'intent_sha256',
++                    'decision', 'observed_version', 'observed_digest', 'issued_unix',
++                    'expires_unix', 'receipt_present', 'observed_store_id'})
++HEX32 = re.compile(r'^[0-9a-f]{32}$')
++DEPLOY = re.compile(r'^[a-zA-Z0-9_.:-]{1,96}$')
++VALID_DECISIONS = {'FINALIZE_COMMIT', 'ABORT_NOT_COMMITTED'}
++MAX_VALIDITY = 60
++
++
++def _canonical(value):
++    # This fixed-field, integer/string/boolean-only encoding is deliberate,
++    # not an implementation of the full RFC 8785 standard.
++    return json.dumps(value, sort_keys=True, separators=(',', ':'), ensure_ascii=True,
++                      allow_nan=False).encode('ascii')
++
++
++def _intent_hash(intent: Intent) -> str:
++    validate_intent(intent)
++    return hashlib.sha256(_canonical(asdict(intent))).hexdigest()
++
++
++def _fields_match(intent, decision, info, snap):
++    if info['receipt_auth'] != 'HMAC_CHAIN_V2' or info['store_id'] != intent.store_id:
++        raise ReviewDenied('not a valid authenticated V2 store')
++    record = info.get('request')
++    if decision == 'FINALIZE_COMMIT':
++        ok = (snap.version == intent.version and snap.digest.hex() == intent.digest and
++              record is not None and record['request_id'] == intent.request_id and
++              record['version'] == intent.version and
++              record['base_version'] == intent.base_version and
++              record['proposal_hash'] == intent.proposal_hash and
++              record['digest_sha256'] == intent.digest)
++    elif decision == 'ABORT_NOT_COMMITTED':
++        ok = (snap.version == intent.base_version and snap.digest.hex() == intent.base_digest and
++              record is None)
++    else:
++        raise ReviewDenied('invalid decision')
++    if not ok:
++        raise ReviewDenied('observer found no matching durable state')
++    return record is not None
++
++
++def issue_observation(*, store: StateStore, anchor, intent: Intent, decision: str,
++                      deployment_id: str, signing_key: Ed25519PrivateKey,
++                      now: int|None = None, lifetime_seconds: int = 30) -> dict:
++    """REFERENCE OBSERVER, ONLY run with a securely isolated signer + read-only source.
++
++    Can verify and sign a *currently* authenticated store snapshot. The caller is
++    responsible for proving that it is an independent, stable source of truth.
++    """
++    if not isinstance(signing_key, Ed25519PrivateKey):
++        raise TypeError('Ed25519 signer required')
++    if type(deployment_id) is not str or DEPLOY.fullmatch(deployment_id) is None:
++        raise ValueError('noncanonical deployment id')
++    if type(lifetime_seconds) is not int or not 1 <= lifetime_seconds <= MAX_VALIDITY:
++        raise ValueError('lifetime out of range')
++    if store.journal_mode != 'DELETE':
++        raise ReviewDenied('observer requires DELETE/EXTRA store')
++    remote = anchor.status()
++    if remote.pending != intent or remote.committed.version != intent.base_version or remote.committed.store_id != intent.store_id or remote.committed.digest != intent.base_digest:
++        raise ReviewDenied('observer anchor intent mismatch')
++    info,snap=store.inspect_request(bytes.fromhex(intent.request_id))
++    present=_fields_match(intent,decision,info,snap)
++    if now is None:
++        now=int(time.time())
++    if type(now) is not int or now<0 or now>=(1<<63)-MAX_VALIDITY:
++        raise ValueError('observer clock out of range')
++    statement={
++        'protocol':'Equal3-observation-1', 'deployment_id':deployment_id,
++        'observation_id':secrets.token_hex(16), 'intent_sha256':_intent_hash(intent),
++        'decision':decision, 'observed_version':snap.version,
++        'observed_digest':snap.digest.hex(), 'observed_store_id':info['store_id'],
++        'issued_unix':now, 'expires_unix':now+lifetime_seconds,
++        'receipt_present':present
++    }
++    signature=signing_key.sign(DOMAIN+_canonical(statement))
++    return {'statement':statement, 'signature':signature.hex()}
++
++
++def verify_observation(evidence, *, intent: Intent, decision: str,
++                       deployment_id: str, public_key: Ed25519PublicKey,
++                       now:int|None = None) -> None:
++    """Validate observation against pending intent and trusted out-of-band public key."""
++    if not isinstance(public_key, Ed25519PublicKey):
++        raise ReviewDenied('untrusted evidence verification key')
++    if type(deployment_id) is not str or DEPLOY.fullmatch(deployment_id) is None:
++        raise ReviewDenied('invalid verifier deployment id')
++    if type(evidence) is not dict or set(evidence) != {'statement','signature'}:
++        raise ReviewDenied('missing or unexpected evidence fields')
++    statement=evidence['statement'];signature=evidence['signature']
++    if type(statement) is not dict or set(statement) != FIELDS:
++        raise ReviewDenied('noncanonical statement structure')
++    if type(signature) is not str or len(signature)!=128:
++        # Ed25519 signatures encode as 128 lowercase hexadecimal characters.
++        raise ReviewDenied('bad signature encoding')
++    if not all(ch in '0123456789abcdef' for ch in signature):
++        raise ReviewDenied('noncanonical signature encoding')
++    if (statement['protocol'] != 'Equal3-observation-1' or
++        statement['deployment_id'] != deployment_id or
++        type(statement['observation_id']) is not str or not HEX32.fullmatch(statement['observation_id']) or
++        statement['intent_sha256'] != _intent_hash(intent) or statement['decision'] != decision or
++        statement['observed_store_id'] != intent.store_id):
++        raise ReviewDenied('evidence identity mismatch')
++    want_ver = intent.version if decision=='FINALIZE_COMMIT' else intent.base_version
++    want_digest = intent.digest if decision=='FINALIZE_COMMIT' else intent.base_digest
++    if (type(statement['observed_version']) is not int or statement['observed_version'] != want_ver or
++        statement['observed_digest'] != want_digest or
++        type(statement['receipt_present']) is not bool or
++        statement['receipt_present'] != (decision == 'FINALIZE_COMMIT')):
++        raise ReviewDenied('evidence does not prove requested decision')
++    start=statement['issued_unix'];end=statement['expires_unix']
++    if (type(start) is not int or type(end) is not int or start<0 or
++        not 1<=end-start<=MAX_VALIDITY):
++        raise ReviewDenied('invalid evidence validity interval')
++    if now is None:now=int(time.time())
++    if type(now) is not int or not start <= now <= end:
++        raise ReviewDenied('evidence expired or outside validity interval')
++    try:
++        public_key.verify(bytes.fromhex(signature),DOMAIN+_canonical(statement))
++    except (InvalidSignature, ValueError, TypeError) as exc:
++        raise ReviewDenied('invalid independent observer signature') from exc
++
++
++class EvidenceRequiredCASAnchor(PersistentCASAnchor):
++    """Explicit opt-in authority facade: no finalize/abort WITHOUT evidence.
++
++    Does not create a trust boundary by itself; the stored anchor and private
++    attester signer must actually be independently administrated.
++    """
++    def __init__(self, db_path, *, reviewer_key, seal_key,
++                 attester_public_key: Ed25519PublicKey, deployment_id: str):
++        if not isinstance(attester_public_key,Ed25519PublicKey):
++            raise ValueError('independent Ed25519 public key required')
++        if type(deployment_id) is not str or DEPLOY.fullmatch(deployment_id) is None:
++            raise ValueError('deployment id required')
++        super().__init__(db_path,reviewer_key=reviewer_key,seal_key=seal_key)
++        self._attester_public_key=attester_public_key
++        self._deployment_id=deployment_id
++
++    @classmethod
++    def bootstrap(cls, db_path, position, *, reviewer_key, seal_key,
++                  attester_public_key, deployment_id):
++        # The initial bootstrap remains local and requires an independent
++        # provenance procedure before any production introduction.
++        PersistentCASAnchor.bootstrap(db_path,position,
++                                      reviewer_key=reviewer_key,seal_key=seal_key)
++        return cls(db_path,reviewer_key=reviewer_key,seal_key=seal_key,
++                   attester_public_key=attester_public_key,
++                   deployment_id=deployment_id)
++
++    def adjudicate(self,intent,decision,token,*,nonce=None,evidence=None):
++        verify_observation(evidence,intent=intent,decision=decision,
++                           public_key=self._attester_public_key,
++                           deployment_id=self._deployment_id)
++        return super().adjudicate(intent,decision,token,nonce=nonce)
+--- /dev/null
++++ v0716/test_attested_commit_v0716.py
+@@ -0,0 +1,246 @@
++"""Negative-first attested external approval tests; RESEARCH ONLY."""
++from __future__ import annotations
++from copy import deepcopy
++from contextlib import closing
++import hashlib
++import hmac
++import tempfile
++import threading
++import time
++import unittest
++from pathlib import Path
++
++from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
++from anchor_protocol import CoordinatedStore, AnchorHold, ReviewDenied, Intent, _review_message, position_for_genesis
++from anchor_wire import PersistentCASAnchor, _UnixAuthority, _Handler, RPCAnchor
++from anchored_writer_v0715 import AnchoredWriterCore
++from writer_service_v0714 import SET
++from state_store import StateStore, prepare_update
++from commit_evidence_v0716 import (EvidenceRequiredCASAnchor, issue_observation,
++                                   verify_observation)
++
++KEY=b'K'*32;REVIEW=b'R'*32;SEAL=b'S'*32;RPC_KEY=b'P'*32
++DEPLOY='equal3-lab-0716'
++
++class AttestedCommitTests(unittest.TestCase):
++    def setUp(self):
++        t=tempfile.TemporaryDirectory();self.addCleanup(t.cleanup)
++        self.dir=Path(t.name);self.db=self.dir/'db.sqlite'
++        self.store=StateStore.create(self.db,key=KEY,initial=b'init',journal_mode='DELETE')
++        self.key=Ed25519PrivateKey.generate();self.trusted=self.key.public_key()
++        self.wrong=Ed25519PrivateKey.generate()
++        parent=self.dir/'anchor';parent.mkdir(mode=0o700)
++        self.anchor=EvidenceRequiredCASAnchor.bootstrap(parent/'db.sqlite',position_for_genesis(self.store),
++            reviewer_key=REVIEW,seal_key=SEAL,attester_public_key=self.trusted,deployment_id=DEPLOY)
++        self.core=AnchoredWriterCore(self.store,self.anchor)
++        self.rid=b'J'*16
++
++    def prepare(self, *, apply=True, body=b'new'):
++        if apply:
++            result=self.core.dispatch(SET,self.rid,body)
++            self.assertFalse(result['ok'])
++        else:
++            proposal,_=prepare_update(self.store,body,request_id=self.rid)
++            info,snap=self.store.read_verified()
++            intent=Intent(info['store_id'],snap.version,snap.digest.hex(),snap.version+1,
++                          hashlib.sha256(body).hexdigest(),self.rid.hex(),hashlib.sha256(proposal).hexdigest())
++            self.anchor.prepare(intent)
++        return self.anchor.status().pending
++
++    def token(self,intent,decision):
++        return hmac.new(REVIEW,_review_message(intent,decision),hashlib.sha256).digest()
++
++    def observation(self,intent,decision,**kwargs):
++        return issue_observation(store=self.store,anchor=self.anchor,intent=intent,
++                                 decision=decision, deployment_id=DEPLOY,signing_key=self.key,**kwargs)
++
++    def test_original_persistent_anchor_accepts_review_with_no_commit(self):
++        # Actual v0.7.15 vulnerability reproduced as an explicit negative control.
++        legacy_dir=self.dir/'legacy';legacy_dir.mkdir(mode=0o700)
++        unsafe=PersistentCASAnchor.bootstrap(legacy_dir/'anchor.db',position_for_genesis(self.store),reviewer_key=REVIEW,seal_key=SEAL)
++        original,_=prepare_update(self.store,b'forged',request_id=self.rid)
++        i,s=self.store.read_verified()
++        intent=Intent(i['store_id'],s.version,s.digest.hex(),1,hashlib.sha256(b'forged').hexdigest(),
++                      self.rid.hex(),hashlib.sha256(original).hexdigest())
++        unsafe.prepare(intent)
++        unsafe.adjudicate(intent,'FINALIZE_COMMIT',self.token(intent,'FINALIZE_COMMIT'))
++        self.assertEqual(unsafe.status().committed.version,1)
++        self.assertEqual(self.store.read().version,0)  # no actual SQLite commit
++
++    def test_attested_anchor_refuses_token_without_observation(self):
++        i=self.prepare(apply=False)
++        with self.assertRaises(ReviewDenied):
++            self.anchor.adjudicate(i,'FINALIZE_COMMIT',self.token(i,'FINALIZE_COMMIT'))
++        self.assertEqual(self.anchor.status().committed.version,0)
++        self.assertIsNotNone(self.anchor.status().pending)
++
++    def test_cannot_issue_commit_observation_without_commit(self):
++        i=self.prepare(apply=False)
++        with self.assertRaises(ReviewDenied):self.observation(i,'FINALIZE_COMMIT')
++        self.assertEqual(self.anchor.status().committed.version,0)
++
++    def test_full_commit_positive_with_signed_attestation(self):
++        i=self.prepare()
++        evidence=self.observation(i,'FINALIZE_COMMIT')
++        r=CoordinatedStore(self.store,self.anchor).adjudicate('FINALIZE_COMMIT',self.token(i,'FINALIZE_COMMIT'),evidence=evidence)
++        self.assertEqual(r.code,'MATCH')
++        self.assertTrue(self.core.dispatch(SET,self.rid,b'new')['ok'])
++        self.assertEqual(self.anchor.status().committed.version,1)
++
++    def test_valid_reviewer_token_wrong_attester_signer_rejected(self):
++        i=self.prepare()
++        ev=issue_observation(store=self.store,anchor=self.anchor,intent=i,decision='FINALIZE_COMMIT',
++                             deployment_id=DEPLOY,signing_key=self.wrong)
++        with self.assertRaises(ReviewDenied):
++            self.anchor.adjudicate(i,'FINALIZE_COMMIT',self.token(i,'FINALIZE_COMMIT'),evidence=ev)
++        self.assertEqual(self.anchor.status().committed.version,0)
++
++    def test_expired_evidence_rejected(self):
++        i=self.prepare();ev=self.observation(i,'FINALIZE_COMMIT',now=int(time.time())-100)
++        with self.assertRaises(ReviewDenied):
++            self.anchor.adjudicate(i,'FINALIZE_COMMIT',self.token(i,'FINALIZE_COMMIT'),evidence=ev)
++
++    def test_future_evidence_rejected(self):
++        i=self.prepare();ev=self.observation(i,'FINALIZE_COMMIT',now=int(time.time())+100)
++        with self.assertRaises(ReviewDenied):
++            self.anchor.adjudicate(i,'FINALIZE_COMMIT',self.token(i,'FINALIZE_COMMIT'),evidence=ev)
++
++    def test_wrong_deployment_rejected_even_with_valid_signature(self):
++        i=self.prepare()
++        ev=issue_observation(store=self.store,anchor=self.anchor,intent=i,decision='FINALIZE_COMMIT',
++                             deployment_id='another-site',signing_key=self.key)
++        with self.assertRaises(ReviewDenied):
++            self.anchor.adjudicate(i,'FINALIZE_COMMIT',self.token(i,'FINALIZE_COMMIT'),evidence=ev)
++
++    def test_tampered_statement_rejected(self):
++        i=self.prepare();ev=self.observation(i,'FINALIZE_COMMIT');ev=deepcopy(ev)
++        ev['statement']['observed_digest']='f'*64
++        with self.assertRaises(ReviewDenied):
++            self.anchor.adjudicate(i,'FINALIZE_COMMIT',self.token(i,'FINALIZE_COMMIT'),evidence=ev)
++
++    def test_tampered_signature_rejected(self):
++        i=self.prepare();ev=self.observation(i,'FINALIZE_COMMIT')
++        ev['signature']='0'*128
++        with self.assertRaises(ReviewDenied):
++            self.anchor.adjudicate(i,'FINALIZE_COMMIT',self.token(i,'FINALIZE_COMMIT'),evidence=ev)
++
++    def test_unknown_json_field_rejected(self):
++        i=self.prepare();ev=self.observation(i,'FINALIZE_COMMIT')
++        ev['statement']['new_field']='downgrade'
++        with self.assertRaises(ReviewDenied):
++            self.anchor.adjudicate(i,'FINALIZE_COMMIT',self.token(i,'FINALIZE_COMMIT'),evidence=ev)
++
++    def test_wrong_request_intent_rejected(self):
++        i=self.prepare();ev=self.observation(i,'FINALIZE_COMMIT')
++        tampered=Intent(i.store_id,i.base_version,i.base_digest,i.version,i.digest,(b'x'*16).hex(),i.proposal_hash)
++        with self.assertRaises(ReviewDenied):
++            self.anchor.adjudicate(tampered,'FINALIZE_COMMIT',self.token(tampered,'FINALIZE_COMMIT'),evidence=ev)
++
++    def test_observer_refuses_abort_after_real_commit(self):
++        i=self.prepare()
++        with self.assertRaises(ReviewDenied):self.observation(i,'ABORT_NOT_COMMITTED')
++
++    def test_abort_before_commit_with_signed_observation(self):
++        i=self.prepare(apply=False)
++        ev=self.observation(i,'ABORT_NOT_COMMITTED')
++        result=CoordinatedStore(self.store,self.anchor).adjudicate('ABORT_NOT_COMMITTED',self.token(i,'ABORT_NOT_COMMITTED'),evidence=ev)
++        self.assertEqual(result.code,'MATCH')
++        self.assertIsNone(self.anchor.status().pending)
++
++    def test_double_replay_attestation_does_not_duplicate_commit(self):
++        i=self.prepare();ev=self.observation(i,'FINALIZE_COMMIT');token=self.token(i,'FINALIZE_COMMIT')
++        self.anchor.adjudicate(i,'FINALIZE_COMMIT',token,evidence=ev)
++        with self.assertRaises(AnchorHold):
++            self.anchor.adjudicate(i,'FINALIZE_COMMIT',token,evidence=ev)
++        self.assertEqual(self.anchor.status().committed.version,1)
++
++    def test_invalid_public_key_configuration_refused(self):
++        with self.assertRaises(ValueError):
++            EvidenceRequiredCASAnchor(self.anchor.path,reviewer_key=REVIEW,seal_key=SEAL,
++                                      attester_public_key=b'bad',deployment_id=DEPLOY)
++
++    def test_live_rpc_refuses_unattested_and_accepts_attested(self):
++        sock=str(self.dir/'authority.sock')
++        with _UnixAuthority(sock,_Handler) as srv:
++            srv.backend=self.anchor;srv.writer_uid=__import__('os').geteuid();srv.writer_key=RPC_KEY
++            th=threading.Thread(target=srv.serve_forever,kwargs={'poll_interval':.02},daemon=True)
++            th.start()
++            try:
++                rpc=RPCAnchor(sock,writer_key=RPC_KEY)
++                remote_core=AnchoredWriterCore(self.store,rpc)
++                response=remote_core.dispatch(SET,self.rid,b'new')
++                self.assertFalse(response['ok'])
++                i=self.anchor.status().pending
++                token=self.token(i,'FINALIZE_COMMIT')
++                with self.assertRaises(ReviewDenied):
++                    rpc.adjudicate(i,'FINALIZE_COMMIT',token)
++                ev=self.observation(i,'FINALIZE_COMMIT')
++                out=CoordinatedStore(self.store,rpc).adjudicate('FINALIZE_COMMIT',token,evidence=ev)
++                self.assertEqual(out.code,'MATCH')
++                self.assertTrue(remote_core.dispatch(SET,self.rid,b'new')['ok'])
++            finally:
++                srv.shutdown();th.join(3)
++
++    def test_evidence_not_sufficient_without_reviewer_approval(self):
++        i=self.prepare();ev=self.observation(i,'FINALIZE_COMMIT')
++        with self.assertRaises(ReviewDenied):
++            self.anchor.adjudicate(i,'FINALIZE_COMMIT',b'X'*32,evidence=ev)
++        self.assertEqual(self.anchor.status().committed.version,0)
++
++    def test_live_authority_serve_default_denies_unattested_backend(self):
++        from anchor_wire import serve
++        with self.assertRaisesRegex(AnchorHold,'attested authority required'):
++            serve(self.anchor.path,str(self.dir/'no-unsafe.sock'),writer_key=RPC_KEY,
++                  reviewer_key=REVIEW,seal_key=SEAL,writer_uid=54321)
++        self.assertFalse((self.dir/'no-unsafe.sock').exists())
++
++    def test_attested_service_invalid_deployment_fails_closed(self):
++        from anchor_wire import serve
++        with self.assertRaises(ValueError):
++            serve(self.anchor.path,str(self.dir/'invalid.sock'),writer_key=RPC_KEY,
++                  reviewer_key=REVIEW,seal_key=SEAL,writer_uid=54321,
++                  attester_public_key=self.trusted,deployment_id='with spaces')
++        self.assertFalse((self.dir/'invalid.sock').exists())
++
++    def test_invalid_attestation_layout_fails_closed(self):
++        i=self.prepare();ev=self.observation(i,'FINALIZE_COMMIT')
++        for wrong in (None,{},[],{'statement':ev['statement']},
++                      {'statement':ev['statement'],'signature':b'bytes'},
++                      {'statement':ev['statement'],'signature':'a'*4000}):
++            with self.subTest(wrong=type(wrong).__name__),self.assertRaises(ReviewDenied):
++                self.anchor.adjudicate(i,'FINALIZE_COMMIT',self.token(i,'FINALIZE_COMMIT'),evidence=wrong)
++        self.assertEqual(self.anchor.status().committed.version,0)
++
++    def test_attested_mode_restart_keeps_reviewer_gate(self):
++        i=self.prepare();ev=self.observation(i,'FINALIZE_COMMIT')
++        after=EvidenceRequiredCASAnchor(self.anchor.path,reviewer_key=REVIEW,seal_key=SEAL,
++                                        attester_public_key=self.trusted,deployment_id=DEPLOY)
++        with self.assertRaises(ReviewDenied):
++            after.adjudicate(i,'FINALIZE_COMMIT',self.token(i,'FINALIZE_COMMIT'))
++        after.adjudicate(i,'FINALIZE_COMMIT',self.token(i,'FINALIZE_COMMIT'),evidence=ev)
++        self.assertEqual(after.status().committed.version,1)
++
++    def test_attestation_key_pin_refuses_rotated_signer(self):
++        i=self.prepare()
++        ev=issue_observation(store=self.store,anchor=self.anchor,intent=i,
++                             decision='FINALIZE_COMMIT',deployment_id=DEPLOY,
++                             signing_key=self.wrong)
++        with self.assertRaises(ReviewDenied):
++            self.anchor.adjudicate(i,'FINALIZE_COMMIT',self.token(i,'FINALIZE_COMMIT'),evidence=ev)
++
++    def test_signature_cannot_prevent_post_observation_joint_storage_rollback(self):
++        """Known NO-GO: signature authenticates an observation, not permanence."""
++        import shutil
++        saved=self.dir/'genesis-copy.sqlite'
++        shutil.copy2(self.db,saved)
++        i=self.prepare()
++        valid=self.observation(i,'FINALIZE_COMMIT')
++        # Hypothetical hostile recovery domain can replace local StateStore
++        # *after* observer signed. On this host no independent durable root.
++        shutil.copy2(saved,self.db)
++        self.anchor.adjudicate(i,'FINALIZE_COMMIT',self.token(i,'FINALIZE_COMMIT'),evidence=valid)
++        self.assertEqual(self.anchor.status().committed.version,1)
++        self.assertEqual(self.store.read().version,0)
++        self.assertEqual(CoordinatedStore(self.store,self.anchor).diagnose().code,'ROLLBACK_HOLD')
++
++if __name__=='__main__':unittest.main()
+--- /dev/null
++++ v0716/run_v0716_suites.py
+@@ -0,0 +1,34 @@
++from __future__ import annotations
++import json,os,pathlib,re,subprocess,sys,time
++ROOT=pathlib.Path(__file__).resolve().parent
++E=ROOT/'EVIDENCE_V0716';E.mkdir(exist_ok=True)
++GROUPS={
++ 'anchor':['test_anchor_protocol','test_anchor_v077','test_anchor_v078','test_anchor_v079','test_anchor_wire'],
++ 'equal':['test_equal3','test_extensions','test_fault_lab','test_guarded_store','test_release_preflight_v078','test_v0713_rollback'],
++ 'store':['test_store','test_v07','test_v071','test_v0710_security','test_v0712_integrity','test_v074_hardening','test_witness'],
++ 'runtime':['test_runtime_gate_v0711','test_sqlite_build_v0711'],
++ 'protected_writer':['test_writer_service_v0714'],
++ 'new_coordinated_writer':['test_anchored_writer_v0715'],
++ 'attested_gate':['test_attested_commit_v0716'],
++}
++report={}
++for name,group in GROUPS.items():
++    command=[sys.executable,'-W','error::ResourceWarning','-m','unittest','-q',*group]
++    started=time.monotonic()
++    print(f'RUN {name}',flush=True)
++    try:
++        result=subprocess.run(command,cwd=ROOT,env={**os.environ,'PYTHONDONTWRITEBYTECODE':'1'},capture_output=True,text=True,timeout=115)
++        output=result.stdout+result.stderr
++        match=re.search(r'Ran (\d+) tests? in ([\d.]+)s',output)
++        status='PASS' if result.returncode==0 and match else 'FAIL'
++        report[name]={'tests':int(match.group(1)) if match else None,'status':status,'returncode':result.returncode,'seconds':round(time.monotonic()-started,3)}
++    except subprocess.TimeoutExpired as exc:
++        output=(exc.stdout or b'').decode(errors='replace') if isinstance(exc.stdout,bytes) else (exc.stdout or '')
++        output+='\nTIMEOUT';report[name]={'tests':None,'status':'TIMEOUT','seconds':round(time.monotonic()-started,3)}
++    (E/(name+'_tests.log')).write_text(output)
++    print(name,report[name],flush=True)
++    if report[name]['status'] != 'PASS':
++        print(output[-1000:],flush=True)
++        break
++(E/'suite_summary.json').write_text(json.dumps(report,indent=2)+'\n')
++print('RESULT',json.dumps(report),flush=True)
+--- /dev/null
++++ v0716/bench_attestation_v0716.py
+@@ -0,0 +1,65 @@
++"""Small synthetic ABBA microbenchmark. Not production SLA or trust-domain benchmark."""
++from __future__ import annotations
++import csv,hashlib,hmac,statistics,time,tempfile
++from pathlib import Path
++from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
++from anchor_protocol import position_for_genesis,CoordinatedStore,_review_message
++from anchor_wire import PersistentCASAnchor
++from commit_evidence_v0716 import EvidenceRequiredCASAnchor,issue_observation
++from anchored_writer_v0715 import AnchoredWriterCore
++from state_store import StateStore
++from writer_service_v0714 import SET
++
++KEY=b'K'*32;REVIEW=b'R'*32;SEAL=b'S'*32
++
++def trial(attested, size, sweep, repetitions=25):
++    with tempfile.TemporaryDirectory() as td:
++        p=Path(td);store=StateStore.create(p/'state.db',key=KEY,initial=b'i',journal_mode='DELETE')
++        a=p/'anchor';a.mkdir(mode=0o700)
++        signer=Ed25519PrivateKey.generate()
++        anchor=(EvidenceRequiredCASAnchor.bootstrap(a/'db',position_for_genesis(store),reviewer_key=REVIEW,
++                    seal_key=SEAL,attester_public_key=signer.public_key(),deployment_id='bench-lab')
++                if attested else
++                PersistentCASAnchor.bootstrap(a/'db',position_for_genesis(store),reviewer_key=REVIEW,seal_key=SEAL))
++        c=AnchoredWriterCore(store,anchor);coord=CoordinatedStore(store,anchor)
++        out=[]
++        for i in range(repetitions+4):
++            rid=(i+1).to_bytes(16,'big');body=bytes([i%251])*size
++            start=time.perf_counter_ns()
++            response=c.dispatch(SET,rid,body)
++            assert not response['ok'] and response['assessment']=='COMMITTED_PENDING_HOLD'
++            intent=anchor.status().pending
++            token=hmac.new(REVIEW,_review_message(intent,'FINALIZE_COMMIT'),hashlib.sha256).digest()
++            if attested:
++                evidence=issue_observation(store=store,anchor=anchor,intent=intent,
++                          decision='FINALIZE_COMMIT',deployment_id='bench-lab',signing_key=signer)
++                after_observation=time.perf_counter_ns()
++                assert coord.adjudicate('FINALIZE_COMMIT',token,evidence=evidence).code=='MATCH'
++            else:
++                after_observation=time.perf_counter_ns()
++                assert coord.adjudicate('FINALIZE_COMMIT',token).code=='MATCH'
++            assert c.dispatch(SET,rid,body)['ok']
++            end=time.perf_counter_ns()
++            if i>=4:
++                out.append({'mode':'SIGNED_OBSERVATION' if attested else 'REVIEW_TOKEN_ONLY',
++                            'payload_bytes':size,'sweep':sweep,'ordinal':i-3,
++                            'total_ms':round((end-start)/1e6,6),
++                            'observer_phase_ms':round((after_observation-start)/1e6,6)})
++        return out
++
++if __name__=='__main__':
++    rows=[]
++    for size in (1024,65536):
++        for sweep,(m1,m2) in enumerate(((False,True),(True,False),(True,False),(False,True)),1):
++            for att in (m1,m2):
++                batch=trial(att,size,sweep)
++                rows.extend(batch)
++                print(size,sweep,att,'p50',round(statistics.median(x['total_ms'] for x in batch),3),'ms',flush=True)
++    out=Path(__file__).resolve().parent/'EVIDENCE_V0716'/'benchmark_attestation_abba.csv'
++    out.parent.mkdir(exist_ok=True)
++    with out.open('w',newline='') as f:
++        wr=csv.DictWriter(f,fieldnames=list(rows[0]));wr.writeheader();wr.writerows(rows)
++    for size in (1024,65536):
++        for mode in ('REVIEW_TOKEN_ONLY','SIGNED_OBSERVATION'):
++            m=[statistics.median(x['total_ms'] for x in rows if x['mode']==mode and x['payload_bytes']==size and x['sweep']==j) for j in (1,2,3,4)]
++            print('SUMMARY',size,mode,'median of sweep medians',round(statistics.median(m),3))

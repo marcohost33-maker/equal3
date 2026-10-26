@@ -1,0 +1,18 @@
+{
+  "variant": "Equal3_v079_Research",
+  "journal": "delete",
+  "sqlite_version": "3.46.1",
+  "source_sha256": "b65a5488be7c4e0dd275e65b574de645490bd2e45bbecf2b500e63673dcffa3b",
+  "round": 3,
+  "n": 80,
+  "transition": {
+    "p50_ms": 8.1225,
+    "p95_ms": 11.046,
+    "count": 80
+  },
+  "status": {
+    "p50_ms": 1.1421,
+    "p95_ms": 1.8754,
+    "count": 80
+  }
+}

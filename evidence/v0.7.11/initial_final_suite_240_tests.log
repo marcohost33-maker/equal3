@@ -1,0 +1,10 @@
+usage: python -m unittest [-h] --policy-file POLICY_FILE
+                          --signature-file SIGNATURE_FILE
+                          --public-key-file PUBLIC_KEY_FILE
+                          --deployment-id DEPLOYMENT_ID
+python -m unittest: error: the following arguments are required: --policy-file, --signature-file, --public-key-file, --deployment-id
+{"reason": "[Errno 2] No such file or directory: '/tmp/tmpagjjq3ud/missing'", "release_verdict": "NO_GO", "runtime_gate": "HOLD"}
+----------------------------------------------------------------------
+Ran 240 tests in 90.007s
+
+OK

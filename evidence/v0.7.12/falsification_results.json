@@ -1,0 +1,20 @@
+{
+  "v0711": {
+    "0_receipts_read": "ACCEPTED_FORGED_STATE",
+    "0_receipts_read_verified": "ACCEPTED_FORGED_STATE",
+    "0_receipts_verify": "ACCEPTED_FORGED_STATE",
+    "1_receipts_read": "ACCEPTED_FORGED_STATE",
+    "1_receipts_read_verified": "IntegrityError",
+    "1_receipts_verify": "IntegrityError",
+    "loaded_source": "/mnt/data/equal3_v0711_work/Equal3_v0711_Research/state_store.py"
+  },
+  "v0712": {
+    "0_receipts_read": "IntegrityError",
+    "0_receipts_read_verified": "IntegrityError",
+    "0_receipts_verify": "IntegrityError",
+    "1_receipts_read": "IntegrityError",
+    "1_receipts_read_verified": "IntegrityError",
+    "1_receipts_verify": "IntegrityError",
+    "loaded_source": "/mnt/data/equal3_v0712_work/Equal3_v0712_Research/state_store.py"
+  }
+}

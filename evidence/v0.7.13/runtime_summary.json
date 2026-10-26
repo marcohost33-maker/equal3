@@ -1,0 +1,7 @@
+{
+  "python": "3.13.5",
+  "sqlite3": "3.46.1",
+  "platform": "Linux-6.18.55-x86_64-with-glibc2.41",
+  "patched_binary_integrated": false,
+  "source_id": "2024-08-13 09:16:08 c9c2ab54ba1f5f46360f1b4f35d849cd3f080e6fc2b6c60e91b16c63f69aalt1"
+}

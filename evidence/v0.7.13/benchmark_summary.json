@@ -1,0 +1,27 @@
+{
+  "design": "synthetic same-host ABBA / four rounds per payload, 6 warmup and 30 timed updates per run",
+  "sqlite_version": "3.46.1",
+  "per_condition_median_of_four_run_medians_ms": {
+    "1024B_apply": {
+      "WAL": 2.037013,
+      "DELETE": 2.12084,
+      "ratio_delete_to_wal": 1.0412
+    },
+    "1024B_read": {
+      "WAL": 0.597082,
+      "DELETE": 0.547087,
+      "ratio_delete_to_wal": 0.9163
+    },
+    "65536B_apply": {
+      "WAL": 2.850024,
+      "DELETE": 2.42228,
+      "ratio_delete_to_wal": 0.8499
+    },
+    "65536B_read": {
+      "WAL": 0.739075,
+      "DELETE": 0.636205,
+      "ratio_delete_to_wal": 0.8608
+    }
+  },
+  "caution": "not production throughput, no filesystem/power loss, no concurrency load test"
+}

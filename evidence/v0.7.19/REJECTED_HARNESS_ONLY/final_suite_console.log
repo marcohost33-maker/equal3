@@ -1,0 +1,28 @@
+START anchor
+anchor {'status': 'PASS', 'count': 91, 'elapsed_seconds': 32.912, 'returncode': 0}
+START equal
+equal {'status': 'PASS', 'count': 57, 'elapsed_seconds': 12.828, 'returncode': 0}
+START store
+store {'status': 'PASS', 'count': 96, 'elapsed_seconds': 21.534, 'returncode': 0}
+START runtime
+runtime {'status': 'PASS', 'count': 21, 'elapsed_seconds': 0.798, 'returncode': 0}
+START writer
+writer {'status': 'PASS', 'count': 21, 'elapsed_seconds': 3.683, 'returncode': 0}
+START coordinator
+coordinator {'status': 'PASS', 'count': 23, 'elapsed_seconds': 1.141, 'returncode': 0}
+START attested
+attested {'status': 'PASS', 'count': 24, 'elapsed_seconds': 1.316, 'returncode': 0}
+START policy
+policy {'status': 'PASS', 'count': 14, 'elapsed_seconds': 0.992, 'returncode': 0}
+START root_rotation
+root_rotation {'status': 'PASS', 'count': 28, 'elapsed_seconds': 1.181, 'returncode': 0}
+START external_witness
+external_witness {'status': 'PASS', 'count': 23, 'elapsed_seconds': 1.45, 'returncode': 0}
+Traceback (most recent call last):
+  File "/mnt/data/equal3_v0719_work/run_v0719_suites.py", line 39, in <module>
+    summary['total']=sum(v.get('count') or 0 for v in summary.values())
+                     ~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/data/equal3_v0719_work/run_v0719_suites.py", line 39, in <genexpr>
+    summary['total']=sum(v.get('count') or 0 for v in summary.values())
+                         ^^^^^
+AttributeError: 'bool' object has no attribute 'get'

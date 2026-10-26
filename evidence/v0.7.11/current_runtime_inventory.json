@@ -1,0 +1,11 @@
+{
+  "loaded_sqlite_shared_object": "/usr/lib/x86_64-linux-gnu/libsqlite3.so.0.8.6",
+  "loaded_sqlite_shared_object_sha256": "14c4418a06c5c2e30f5fb57bc8add93762236ae17898c6708984cf15e680ca71",
+  "mapped_file_identity_consistent": true,
+  "python_extension": "/usr/lib/python3.13/lib-dynload/_sqlite3.cpython-313-x86_64-linux-gnu.so",
+  "python_extension_sha256": "ad902edee2ed8dbbaec17309130436ffef1b69b1547a204e41e01e0d807a0c3d",
+  "release_verdict": "NO_GO",
+  "runtime_attestation": "NOT_ATTESTED",
+  "sqlite_source_id": "2024-08-13 09:16:08 c9c2ab54ba1f5f46360f1b4f35d849cd3f080e6fc2b6c60e91b16c63f69aalt1",
+  "sqlite_version": "3.46.1"
+}

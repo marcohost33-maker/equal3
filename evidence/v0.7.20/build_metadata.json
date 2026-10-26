@@ -1,0 +1,10 @@
+{
+  "version": "0.7.20 Research",
+  "python": "3.13.5",
+  "sqlite": "3.46.1",
+  "groups": 11,
+  "verified_tests": 425,
+  "product_status": "NO_GO",
+  "new_source_sha256": "8fb1d5d3c31c0f3df9d3f742848540f8f9b59031ff3b33cd58af102fa716c4be",
+  "benchmark_method": "4 ABBA runs x 80 measured STATUS ops per condition and payload; no independent infrastructure"
+}

@@ -1,0 +1,24 @@
+{
+  "project": "Equal3 / ===",
+  "version": "0.7.14-research",
+  "date": "2026-10-25",
+  "release_decision": "NO_GO",
+  "completed_local": {
+    "baseline_tests_in_four_processes": 265,
+    "writer_tests": 21,
+    "total_split_batches": 286,
+    "real_posix_uid_boundary_test": true,
+    "runtime_verification_synthetic_only": true
+  },
+  "blocking": {
+    "external_cas_anchor": "OPEN",
+    "signed_commit_attestation": "OPEN",
+    "patched_sqlite_runtime": "OPEN",
+    "independent_signer": "OPEN",
+    "enforced_single_writer_in_production": "OPEN",
+    "encryption_key_lifecycle": "OPEN",
+    "power_loss_vfs": "OPEN",
+    "independent_review": "OPEN"
+  },
+  "test_caveat": "Monolithic combined suite timed out; separate complete baseline and new test suites passed; not a monolithic GO evidence."
+}

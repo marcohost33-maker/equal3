@@ -1,0 +1,39 @@
+{
+  "project": "=== / Equal3",
+  "version": "0.7.9-research",
+  "date": "2026-10-25",
+  "decision": "NO_GO",
+  "implemented_local_positive": [
+    "anchor DELETE journal + synchronous EXTRA",
+    "pre-SQLite header WAL refusal",
+    "explicit legacy WAL migration HOLD",
+    "optional group socket 0710/0660",
+    "Linux SO_PEERCRED writer UID separated in synthetic two-UID test",
+    "SQLite 3.52 withdrawn reject"
+  ],
+  "evidence": {
+    "baseline_v078_tests": "190/190 PASS",
+    "new_candidate_tests": "206/206 PASS",
+    "new_tests_added": 16,
+    "runtime": "Python 3.13.5; SQLite 3.46.1",
+    "test_coverage": "not remeasured, do not claim"
+  },
+  "still_open": [
+    "StateStore (WAL) patched and supply-chain-attested SQLite",
+    "actually deployed least-privilege writer/anchor OS separation",
+    "independently administered anti-rollback monotonic anchor",
+    "independent commit attestation",
+    "at-rest encryption including SQLite journals and backups",
+    "VFS and actual power-loss fault lab",
+    "independent security and privacy approval",
+    "time-of-check/time-of-use file path hardening",
+    "scaling and retention audit"
+  ],
+  "nonclaims": [
+    "NO PRODUCTION release",
+    "No physical power-loss test",
+    "No independent rollback immunity",
+    "No GitHub push or merge",
+    "No central compliance sheet edit"
+  ]
+}

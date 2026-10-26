@@ -1,0 +1,3 @@
+# Equal3 Datenschutz und Compliance – Nachtrag v0.7.22
+Datenschutz-Folgen: `request_id` remains a pseudonymous linkable identifier; commit checkpoint exchange should minimize logged identifiers, use keyed opaque IDs where feasible and a retention policy. Independent attester/witness services are separate processors/systems and require data-flow inventory, access controls, DPA/DSG verification, incident plans and key rotation governance.
+Status CH-DSG Art. 7/8 privacy by design/security: OPEN pending threat model + evidence. Art. 22–24 DSFA/breach response screening OPEN pending legal review. External witness at-rest encryption, backup recovery, identity governance P0 OPEN. This is an engineering mapping, not legal advice nor completed compliance certification.

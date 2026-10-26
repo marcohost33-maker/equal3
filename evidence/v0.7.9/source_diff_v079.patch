@@ -1,0 +1,191 @@
+--- a/anchor_wire.py
++++ b/anchor_wire.py
+@@ -1,4 +1,4 @@
+-"""Equal3 v0.7.8 research: persistent SQLite CAS authority + authenticated AF_UNIX RPC.
++"""Equal3 v0.7.9 research: DELETE-journal CAS authority + authenticated AF_UNIX RPC.
+ 
+ This is NOT a hardware-protected independent monotonic anchor. It demonstrates
+ crash/restart, interprocess CAS, role-separated authorization and rollback HOLD
+@@ -42,6 +42,9 @@
+ # Third-party or distro backports require independently verified provenance.
+ def sqlite_wal_reset_safe(version=None):
+     version = sqlite3.sqlite_version_info if version is None else tuple(version)
++    # 3.52.0 was withdrawn for compatibility defects; never endorse as a release.
++    if version[:2] == (3,52):
++        return False
+     return version >= (3,51,3) or (version[:2] == (3,50) and version >= (3,50,7)) or (version[:2] == (3,44) and version >= (3,44,6))
+ 
+ def require_sqlite_wal_safe(*, research_override=False):
+@@ -120,19 +123,49 @@
+         raise PermissionError('anchor directory must be private and owned')
+ 
+ 
++def _verify_delete_header(path: Path):
++    """Refuse WAL / unknown headers BEFORE sqlite3 opens the authority.
++
++    SQLite bytes 18/19 are the file-format write/read versions:
++    01 01 for rollback journal and 02 02 for WAL.
++    This is defense-in-depth, NOT an atomic pathname-to-SQLite FD binding.
++    """
++    _require_parent(path)
++    _require_file(path)
++    if os.path.lexists(str(path)+'-wal') or os.path.lexists(str(path)+'-shm'):
++        raise AnchorHold('WAL authority sidecar present; offline migration required')
++    flags=os.O_RDONLY | getattr(os,'O_NOFOLLOW',0) | getattr(os,'O_CLOEXEC',0)
++    fd=os.open(path,flags)
++    try:
++        st=os.fstat(fd)
++        if not stat.S_ISREG(st.st_mode) or st.st_uid!=os.geteuid() or stat.S_IMODE(st.st_mode)!=0o600:
++            raise PermissionError('authority FD safety mismatch')
++        header=os.read(fd,100)
++        if len(header)<100 or header[:16]!=b'SQLite format 3\x00':
++            raise AnchorHold('authority missing or invalid SQLite header')
++        if header[18:20] != b'\x01\x01':
++            raise AnchorHold('unsealed legacy or WAL/non-DELETE authority blocked; independent offline migration required')
++        observed=os.lstat(path)
++        if (observed.st_dev,observed.st_ino) != (st.st_dev,st.st_ino):
++            raise AnchorHold('authority path changed during header check')
++    finally:
++        os.close(fd)
++
++
+ class PersistentCASAnchor:
+-    """Dedicated SQLite journal for authority state; NOT separate physical trust.
++    """Dedicated rollback-journal SQLite authority; NOT independent physical trust.
+ 
+-    Every mutating transition uses BEGIN IMMEDIATE, WAL FULL, and a single
+-    local DB transaction. It forbids an implicit genesis on restart.
++    Newly bootstrapped databases use journal_mode=DELETE, synchronous=EXTRA.
++    WAL databases require separate, independently attested migration (fail-closed).
++    The research_unsafe_sqlite parameter is retained for legacy callers but
++    never bypasses DELETE-journal enforcement. This does NOT fix the WAL StateStore.
+     """
+     def __init__(self, db_path:str|Path, *, reviewer_key: bytes, seal_key: bytes, research_unsafe_sqlite: bool=False):
+-        require_sqlite_wal_safe(research_override=research_unsafe_sqlite)
+         self.path=Path(db_path).absolute()
+         if type(reviewer_key) is not bytes or len(reviewer_key)<32:
+             raise ValueError('invalid private reviewer credential')
+         _require_parent(self.path)
+-        _require_file(self.path)
++        _verify_delete_header(self.path)
+         if type(seal_key) is not bytes or len(seal_key)<32:
+             raise ValueError('invalid independent authority seal credential')
+         if hmac.compare_digest(seal_key, reviewer_key):
+@@ -146,7 +179,6 @@
+ 
+     @classmethod
+     def bootstrap(cls, db_path:str|Path, position:Position, *,reviewer_key:bytes,seal_key:bytes,research_unsafe_sqlite:bool=False):
+-        require_sqlite_wal_safe(research_override=research_unsafe_sqlite)
+         validate_position(position,genesis=True)
+         if type(seal_key) is not bytes or len(seal_key)<32 or type(reviewer_key) is not bytes or len(reviewer_key)<32:
+             raise ValueError('invalid authority key')
+@@ -160,9 +192,11 @@
+         os.close(fd)
+         try:
+             with closing(sqlite3.connect(str(target),timeout=5)) as db:
+-                if db.execute('PRAGMA journal_mode=WAL').fetchone()[0].lower()!='wal':
+-                    raise WireError('WAL unavailable')
+-                db.execute('PRAGMA synchronous=FULL')
++                if db.execute('PRAGMA journal_mode=DELETE').fetchone()[0].lower()!='delete':
++                    raise AnchorHold('DELETE rollback journal unavailable')
++                db.execute('PRAGMA synchronous=EXTRA')
++                if db.execute('PRAGMA synchronous').fetchone()[0] != 3:
++                    raise AnchorHold('EXTRA synchronization unavailable')
+                 db.execute('PRAGMA trusted_schema=OFF')
+                 db.execute('CREATE TABLE authority(id INTEGER PRIMARY KEY CHECK(id=1), store_id TEXT NOT NULL, version INTEGER NOT NULL, digest TEXT NOT NULL, pending BLOB, audit_root BLOB NOT NULL, seal BLOB NOT NULL)')
+                 db.execute('CREATE TABLE consumed(nonce TEXT PRIMARY KEY, operation TEXT NOT NULL)')
+@@ -177,16 +211,19 @@
+         return cls(target,reviewer_key=reviewer_key,seal_key=seal_key,research_unsafe_sqlite=research_unsafe_sqlite)
+ 
+     def _db(self):
+-        _require_parent(self.path)
+-        _require_file(self.path)
++        _verify_delete_header(self.path)
+         uri='file:'+quote(str(self.path),safe='/')+'?mode=rw'
+         db=sqlite3.connect(uri,uri=True,timeout=5,isolation_level=None)
+         try:
+             db.execute('PRAGMA busy_timeout=5000')
+-            db.execute('PRAGMA synchronous=FULL')
++            # Do not convert existing WAL databases automatically: the v0.7.8
++            # authority could contain uncheckpointed WAL state and sidecars.
++            if db.execute('PRAGMA journal_mode').fetchone()[0].lower() != 'delete':
++                raise AnchorHold('unsealed legacy or WAL/non-DELETE authority blocked; independent offline migration required')
++            db.execute('PRAGMA synchronous=EXTRA')
++            if db.execute('PRAGMA synchronous').fetchone()[0] != 3:
++                raise AnchorHold('EXTRA synchronization invariant failed')
+             db.execute('PRAGMA trusted_schema=OFF')
+-            if db.execute('PRAGMA journal_mode').fetchone()[0].lower()!='wal':
+-                raise WireError('WAL invariant failed')
+         except BaseException:
+             db.close()
+             raise
+@@ -459,15 +496,42 @@
+     return key
+ 
+ 
+-def serve(db_path:str|Path,sock_path:str|Path,*,writer_key:bytes,reviewer_key:bytes,seal_key:bytes,writer_uid:int,research_unsafe_sqlite:bool=False):
++def _require_socket_parent(sock_path:Path, socket_gid:int|None):
++    if socket_gid is None:
++        _require_parent(sock_path)
++        return
++    if type(socket_gid) is not int or socket_gid < 0:
++        raise PermissionError('invalid writer socket group')
++    s=os.lstat(sock_path.parent)
++    if (not stat.S_ISDIR(s.st_mode) or s.st_uid != os.geteuid() or
++        s.st_gid != socket_gid or stat.S_IMODE(s.st_mode) != 0o710):
++        raise PermissionError('group socket directory requires owner=anchor, group=writer and mode=0710')
++
++def serve(db_path:str|Path,sock_path:str|Path,*,writer_key:bytes,reviewer_key:bytes,seal_key:bytes,writer_uid:int,research_unsafe_sqlite:bool=False,socket_gid:int|None=None):
+     if not hasattr(socket,'SO_PEERCRED'):raise RuntimeError('SO_PEERCRED unsupported; refusing to serve')
+     backend=PersistentCASAnchor(db_path,reviewer_key=reviewer_key,seal_key=seal_key,research_unsafe_sqlite=research_unsafe_sqlite)
+     sock_path=Path(sock_path).absolute()
+-    _require_parent(sock_path)
++    _require_socket_parent(sock_path,socket_gid)
+     if os.path.lexists(sock_path):raise FileExistsError('socket path exists; no automatic unlink')
+-    with _UnixAuthority(str(sock_path),_Handler) as server:
++    # Create socket inaccessible to group until group ownership + mode are set.
++    old_umask=os.umask(0o077)
++    try:
++        server_obj=_UnixAuthority(str(sock_path),_Handler)
++    finally:
++        os.umask(old_umask)
++    with server_obj as server:
+         try:
+-            os.chmod(sock_path,0o600)
++            if socket_gid is None:
++                os.chmod(sock_path,0o600)
++            else:
++                if writer_uid == os.geteuid():
++                    raise PermissionError('group socket mode requires distinct writer UID')
++                os.chown(sock_path,-1,socket_gid)
++                os.chmod(sock_path,0o660)
++                st=os.lstat(sock_path)
++                if (not stat.S_ISSOCK(st.st_mode) or st.st_uid!=os.geteuid() or
++                    st.st_gid!=socket_gid or stat.S_IMODE(st.st_mode)!=0o660):
++                    raise PermissionError('socket owner/group/mode mismatch')
+             server.backend=backend
+             server.writer_uid=writer_uid
+             server.writer_key=writer_key
+@@ -484,7 +548,7 @@
+ 
+ 
+ def main():
+-    ap=argparse.ArgumentParser(description='Equal3 v0.7.6 research UNIX anchor (NOT production)')
++    ap=argparse.ArgumentParser(description='Equal3 v0.7.9 research UNIX anchor (NOT production)')
+     ap.add_argument('--db',required=True)
+     ap.add_argument('--socket',required=True)
+     ap.add_argument('--writer-key-file',required=True)
+@@ -493,9 +557,12 @@
+     ap.add_argument('--allow-unsafe-sqlite-research-only',action='store_true',
+                     help='UNSAFE: bypass WAL runtime safety gate for synthetic research only')
+     ap.add_argument('--writer-uid',required=True,type=int)
++    ap.add_argument('--writer-gid',type=int,default=None,
++                    help='Optional separate writer group: socket directory must be 0710 anchor:group')
+     cfg=ap.parse_args()
+     serve(cfg.db,cfg.socket,writer_key=read_credential(cfg.writer_key_file),
+           reviewer_key=read_credential(cfg.reviewer_key_file),seal_key=read_credential(cfg.seal_key_file),
+-          writer_uid=cfg.writer_uid,research_unsafe_sqlite=cfg.allow_unsafe_sqlite_research_only)
++          writer_uid=cfg.writer_uid,socket_gid=cfg.writer_gid,
++          research_unsafe_sqlite=cfg.allow_unsafe_sqlite_research_only)
+ 
+ if __name__=='__main__':main()
