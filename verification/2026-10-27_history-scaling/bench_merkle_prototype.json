@@ -1,0 +1,82 @@
+{
+  "tool": "prototypes/merkle_audit_log/bench_merkle_log.py",
+  "python": "3.13.17",
+  "percentile_method": "nearest rank",
+  "points": [
+    {
+      "events": 1000,
+      "append_with_root": {
+        "n": 1000,
+        "p50_us": 6.93,
+        "p95_us": 30.47,
+        "p99_us": 43.26
+      },
+      "verify_inclusion": {
+        "n": 200,
+        "p50_us": 12.64,
+        "p95_us": 43.45,
+        "p99_us": 53.11
+      },
+      "inclusion_proof_hashes": 10,
+      "verify_consistency": {
+        "n": 200,
+        "p50_us": 15.72,
+        "p95_us": 46.79,
+        "p99_us": 52.77
+      },
+      "consistency_from": 500,
+      "consistency_proof_hashes": 9,
+      "proof_generation_s_prototype": 0.0045
+    },
+    {
+      "events": 10000,
+      "append_with_root": {
+        "n": 1000,
+        "p50_us": 8.9,
+        "p95_us": 36.44,
+        "p99_us": 55.38
+      },
+      "verify_inclusion": {
+        "n": 200,
+        "p50_us": 17.5,
+        "p95_us": 49.5,
+        "p99_us": 71.35
+      },
+      "inclusion_proof_hashes": 14,
+      "verify_consistency": {
+        "n": 200,
+        "p50_us": 19.63,
+        "p95_us": 54.92,
+        "p99_us": 62.58
+      },
+      "consistency_from": 1000,
+      "consistency_proof_hashes": 12,
+      "proof_generation_s_prototype": 0.036
+    },
+    {
+      "events": 100000,
+      "append_with_root": {
+        "n": 1000,
+        "p50_us": 9.74,
+        "p95_us": 15.2,
+        "p99_us": 42.95
+      },
+      "verify_inclusion": {
+        "n": 200,
+        "p50_us": 20.93,
+        "p95_us": 55.57,
+        "p99_us": 66.94
+      },
+      "inclusion_proof_hashes": 17,
+      "verify_consistency": {
+        "n": 200,
+        "p50_us": 20.93,
+        "p95_us": 59.14,
+        "p99_us": 80.26
+      },
+      "consistency_from": 10000,
+      "consistency_proof_hashes": 14,
+      "proof_generation_s_prototype": 0.3986
+    }
+  ]
+}

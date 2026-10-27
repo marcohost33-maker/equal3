@@ -40,6 +40,8 @@ jobs:
         run: python -m unittest -v tools/test_run_test_groups.py
       - name: Test the SQLite runtime check
         run: python -m unittest -v tools/test_check_sqlite_runtime.py
+      - name: Test the RFC 9162 log prototype (ADR-002)
+        run: python -m unittest -v prototypes/merkle_audit_log/test_merkle_log.py
 
   research-tests:
     # Groups, modules and the hang detector live in tools/run_test_groups.py (single source).

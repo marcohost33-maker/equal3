@@ -159,6 +159,12 @@ Recorded on 2026-10-26 when this repository was assembled (details in the commit
 - Test groups on **Linux** were not run locally for the import itself. The first CI run
   (2026-10-26, commit `4435627`) passed 11 groups (402 tests, 4 of them skipped for lack of root);
   `anchor_wire` was not run.
+- **2026-10-27, SQLite 3.54.1** ([verification/2026-10-27_sqlite-3.54.1](verification/2026-10-27_sqlite-3.54.1/README.md)):
+  in CI, built from the official amalgamation (SHA3 pins), mapped by the test processes; 430/430 as
+  root, 0 skips; the WAL-reset gate opens without override (it holds on the system SQLite).
+- **2026-10-27, history scaling** ([verification/2026-10-27_history-scaling](verification/2026-10-27_history-scaling/README.md)):
+  at 100k entries an anchor operation takes about 0.9 s (HOLD one row above the cap) and an
+  authenticated read about 1.7 s; proposal in [docs/ADR-002](docs/ADR-002_checkpointed-audit-log.md).
 - **2026-10-27, Linux re-run** ([verification/2026-10-27_linux](verification/2026-10-27_linux/README.md)):
   flat bundle rebuilt from the mapping, `sha256sum -c MANIFEST_V0722.sha256` rc 0; all 12 groups
   **430/430 as root with 0 skips**, 430 run with 4 skipped as non-root; `anchor_wire` 10/10.
@@ -182,7 +188,8 @@ evidence/
   v0.7.4-v0.7.5/ … v0.7.22/   per-version evidence folders (logs, CSV/JSON, patches)
   fresh-zip-reruns/  rerun logs of the delivered zips (from the 007acc2 knowledge folder)
   manifests/         MANIFEST_V0722.sha256, historical manifests, PATH_MAPPING.tsv
-verification/        later re-runs of the imported tree (not part of the import)
+verification/        later re-runs and measurements of the imported tree (not part of the import)
+prototypes/          design prototypes outside any research version (merkle_audit_log, see ADR-002)
 docs/                audit history, roadmap, threat model, ADR, path mapping
 tools/               verify_provenance.py, run_test_groups.py (+ tests), requirements-ci.lock
 ```

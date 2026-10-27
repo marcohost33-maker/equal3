@@ -19,7 +19,19 @@ All research versions keep the release decision **NO-GO**. Version history of th
   processes, `--allow-skip`, `--expect-reported`, preflight for TMPDIR length (max 73, AF_UNIX)
   and, as root, paths reachable by UID 65534.
 
+- P0-4: CI job that builds SQLite 3.54.1 from the official amalgamation with the unmodified research
+  builder and runs all 430 tests as root on it (0 skips); `tools/check_sqlite_runtime.py` (+ tests)
+  pins version, source id, mapped library path and SHA-256 and checks that the WAL-reset gate opens;
+  negative control on the system SQLite (gate holds). Evidence: `verification/2026-10-27_sqlite-3.54.1/`.
+- P1: `tools/bench_history_scaling.py` and `verification/2026-10-27_history-scaling/` (P50/P95/P99 of the
+  O(n) audit digest and authenticated read at 1k/10k/100k; anchor HOLD at the 100k-row cap);
+  `docs/ADR-002` (proposed RFC 9162 checkpointed log); `prototypes/merkle_audit_log/` (RFC 9162 tree,
+  inclusion and consistency proofs, known-answer, exhaustive, tamper and mutation-checked tests).
+- Runner: records the mapped libsqlite3 and source id, `--expect-sqlite`; as root the loaded library
+  must be readable by other users (the loader otherwise falls back silently, measured).
+
 ### Changed
+- CI runners pinned to ubuntu-24.04.
 - CI runs `anchor_wire` on every push/PR (was manual-only and never started) and adds a root job
   that must run all 430 tests with no skip, so the 4 separate-UID isolation tests run in CI for
   the first time. The non-root job allows exactly those 4 skips by test id; both jobs check

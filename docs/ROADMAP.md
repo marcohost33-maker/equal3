@@ -31,7 +31,20 @@ research record; that decision does not change the NO-GO status and does not cre
   passed on Linux ([verification/2026-10-27_linux](../verification/2026-10-27_linux/README.md)).
   Still open: why `anchor_wire` hung in the audit environment, and a run by someone outside
   this channel ("independent CI" in the sense of the audits).
-- P0-2 to P0-6 and P1 are unchanged and open.
+- **P0-4, 2026-10-27, partly addressed.** CI builds SQLite 3.54.1 from the official amalgamation with
+  the unmodified research builder (SHA3 pins, also listed by sqlite.org). It shows that the test
+  processes map exactly that library, and runs the full regression on it: 430/430 as root, 0 skips.
+  The WAL-reset gate opens without override there and holds on the unpatched system SQLite
+  ([verification/2026-10-27_sqlite-3.54.1](../verification/2026-10-27_sqlite-3.54.1/README.md)).
+  Still open: signed/independently reproduced build evidence and a real deployment.
+- **P1, 2026-10-27, measured and designed, not implemented.**
+  - P50/P95/P99 at 1k/10k/100k: an anchor operation takes about 0.9 s at the 100k-row cap, after
+    which the anchor HOLDs; an authenticated read takes about 1.7 s at 100k commits
+    ([verification/2026-10-27_history-scaling](../verification/2026-10-27_history-scaling/README.md)).
+  - Proposed fix: RFC 9162 checkpointed log ([ADR-002](ADR-002_checkpointed-audit-log.md)), with a
+    tested prototype in `prototypes/merkle_audit_log/`.
+  - Implementation needs its own research round.
+- P0-2, P0-3, P0-5 and P0-6 are unchanged and open.
 
 ## Release gates (RELEASE_GATES_V0722.json)
 

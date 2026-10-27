@@ -41,9 +41,10 @@ them skipped, and left `anchor_wire` to a manual job that had never been started
 
 Environment (from the JSON): Linux x86_64, glibc 2.39, Python 3.13.17, cryptography 46.0.4,
 SQLite **3.45.1** (the audit environment reported SQLite 3.46.1; neither is a patched build, see
-P0-4). The JSON names the commit the runner was started from; the runner file itself is the version
-committed together with these files (`tools/run_test_groups.py` SHA-256
-`2869edd30babc718b0392a1d0f9c28e66ba9aa1a4a3da1f1cfd27b7bf2fb82d5`).
+P0-4). The JSON names the commit the runner was started from; the runner file was the version committed
+together with these files in `c13c08c` (`tools/run_test_groups.py` SHA-256
+`2869edd30babc718b0392a1d0f9c28e66ba9aa1a4a3da1f1cfd27b7bf2fb82d5`). Later versions add SQLite
+library checks and do not change how groups are run or counted.
 
 ## Results
 
