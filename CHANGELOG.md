@@ -10,12 +10,21 @@ All research versions keep the release decision **NO-GO**. Version history of th
   per group, 300 s hang limit (timeout and helper processes killed, counted as failure), fail-closed
   summary parsing, `--require-no-skips`, `--expect-total`, JSON evidence.
 - `verification/2026-10-27_linux/`: Linux re-run from a byte-identical bundle reconstruction:
-  430/430 as root with 0 skips, `anchor_wire` 10/10 (about 11 s each).
+  430/430 as root with 0 skips, `anchor_wire` 10/10 (about 11 s each); tested hang hypotheses
+  (`hang_hypotheses.json`).
+- `tools/requirements-ci.lock`: hash lock of `cryptography==46.0.4` and its dependencies.
+- Runner hardening after self-review: output to a temporary file instead of a pipe (a detached
+  helper made a passing group block and report a timeout; negative-first test), `waitid(WNOWAIT)`
+  before killing the process group (no PGID reuse), recorded skipped test ids and leftover helper
+  processes, `--allow-skip`, `--expect-reported`, preflight for TMPDIR length (max 73, AF_UNIX)
+  and, as root, paths reachable by UID 65534.
 
 ### Changed
 - CI runs `anchor_wire` on every push/PR (was manual-only and never started) and adds a root job
   that must run all 430 tests with no skip, so the 4 separate-UID isolation tests run in CI for
-  the first time. The release decision stays NO-GO.
+  the first time. The non-root job allows exactly those 4 skips by test id; both jobs check
+  per-group counts, install dependencies hash-locked (wheels only) and upload their JSON
+  evidence. The release decision stays NO-GO.
 
 ## [0.7.22-research] — repository assembled 2026-10-26
 

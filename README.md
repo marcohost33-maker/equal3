@@ -101,6 +101,7 @@ git clone https://github.com/marcohost33-maker/equal3.git
 cd equal3
 python3.13 -m venv .venv && . .venv/bin/activate
 pip install -r research/REQUIREMENTS_RESEARCH_GATE.txt   # cryptography==46.0.4
+# (CI installs the same pin hash-locked: pip install --require-hashes --only-binary :all: -r tools/requirements-ci.lock)
 
 # 1) Check that the imported files are byte-identical to the shipped research manifest
 python tools/verify_provenance.py
@@ -138,8 +139,13 @@ request. Each group has a 300 s limit; a group over the limit is killed with its
 and counts as a failure.
 
 Four tests need root because they drop to a separate UID (writer v0.7.14 ×3, anchor socket v0.7.9
-×1); without root they are skipped. CI therefore has two jobs: a normal one (430 run, 4 skipped)
-and a root job that must run all 430 with no skip.
+×1); without root they are skipped. CI therefore has two jobs: a normal one, where only these 4
+test ids may skip, and a root job that must run all 430 with no skip. Both check every group's
+count against the audit and upload their JSON evidence.
+
+Two environment limits, checked by the runner before any test starts: `TMPDIR` must be at most 73
+characters (longer paths break the tests' AF_UNIX sockets), and as root the interpreter, the
+research modules and `TMPDIR` must be reachable by other users (the tests drop to UID 65534).
 
 ## Local verification of this import
 
@@ -156,8 +162,10 @@ Recorded on 2026-10-26 when this repository was assembled (details in the commit
 - **2026-10-27, Linux re-run** ([verification/2026-10-27_linux](verification/2026-10-27_linux/README.md)):
   flat bundle rebuilt from the mapping, `sha256sum -c MANIFEST_V0722.sha256` rc 0; all 12 groups
   **430/430 as root with 0 skips**, 430 run with 4 skipped as non-root; `anchor_wire` 10/10.
-  Python 3.13.17, cryptography 46.0.4, SQLite 3.45.1. Same maintenance channel, not an
-  independent review.
+  Python 3.13.17, cryptography 46.0.4, SQLite 3.45.1. GitHub Actions reproduced 430/430 as root.
+  Hang hypotheses for the audit (TMPDIR length, leftover processes, CPU starvation, sandbox time
+  limit) are recorded there; the cause in the audit environment is not proven. Same maintenance
+  channel, not an independent review.
 
 ## Repository structure
 
@@ -176,7 +184,7 @@ evidence/
   manifests/         MANIFEST_V0722.sha256, historical manifests, PATH_MAPPING.tsv
 verification/        later re-runs of the imported tree (not part of the import)
 docs/                audit history, roadmap, threat model, ADR, path mapping
-tools/               verify_provenance.py, run_test_groups.py (+ tests)
+tools/               verify_provenance.py, run_test_groups.py (+ tests), requirements-ci.lock
 ```
 
 The original bundle was flat. Files were moved into these folders without changing a byte; see

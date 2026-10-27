@@ -43,7 +43,8 @@ jobs:
     # Groups, modules and the hang detector live in tools/run_test_groups.py (single source).
     # anchor_wire runs on every push/PR since 2026-10-27: it passed 10/10 in about 11 s on Linux
     # (verification/2026-10-27_linux/). A group over 300 s is killed and counts as a failure.
-    # Without root, 4 separate-UID isolation tests skip; the root job below runs them.
+    # Without root, exactly the 4 separate-UID isolation tests may skip (by test id); the root
+    # job below runs them. Dependencies install from a hash lock (tools/requirements-ci.lock).
     name: research test groups (non-root)
     needs: provenance
     runs-on: ubuntu-latest
@@ -55,10 +56,25 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-      - name: Install pinned research dependency
-        run: python -m pip install -r research/REQUIREMENTS_RESEARCH_GATE.txt
-      - name: All 12 groups, 430 tests expected
-        run: python tools/run_test_groups.py --expect-total 430 --json "$RUNNER_TEMP/test-groups-nonroot.json"
+      - name: Install research dependency (hash-locked, wheels only)
+        run: |
+          python -m pip install --require-hashes --only-binary :all: -r tools/requirements-ci.lock
+      - name: All 12 groups, per-group counts as reported, only the 4 root-only tests may skip
+        run: >
+          python tools/run_test_groups.py --expect-total 430 --expect-reported
+          --allow-skip test_writer_service_v0714.WriterBoundaryTests.test_untrusted_public_key_and_parent
+          --allow-skip test_writer_service_v0714.WriterBoundaryTests.test_runtime_gate_called_at_startup_and_failclosed
+          --allow-skip test_writer_service_v0714.WriterBoundaryTests.test_real_linux_uid_boundary_separate_client
+          --allow-skip test_anchor_v079.GroupSocketIsolationTests.test_separate_uid_can_connect_but_cannot_read_anchor
+          --json "$RUNNER_TEMP/test-groups-nonroot.json"
+      - name: Keep the evidence JSON
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: test-groups-nonroot
+          path: ${{ runner.temp }}/test-groups-nonroot.json
+          if-no-files-found: error
+          retention-days: 90
 
   research-tests-root:
     # The separate-UID tests (writer v0.7.14 x3, anchor socket v0.7.9 x1) drop to UID 65534.
@@ -80,11 +96,19 @@ jobs:
           sudo install -d -m 0755 /srv/equal3
           sudo cp -r research tools /srv/equal3/
           sudo env "LD_LIBRARY_PATH=${LD_LIBRARY_PATH:-}" "$(command -v python)" -m venv /srv/eq3venv
-          sudo env "LD_LIBRARY_PATH=${LD_LIBRARY_PATH:-}" /srv/eq3venv/bin/python -m pip install -r research/REQUIREMENTS_RESEARCH_GATE.txt
+          sudo env "LD_LIBRARY_PATH=${LD_LIBRARY_PATH:-}" /srv/eq3venv/bin/python -m pip install --require-hashes --only-binary :all: -r tools/requirements-ci.lock
           sudo chmod -R a+rX /srv/equal3 /srv/eq3venv
       - name: All 12 groups as root, 430 tests, no skips allowed
         run: >
           sudo env "LD_LIBRARY_PATH=${LD_LIBRARY_PATH:-}" "GITHUB_SHA=$GITHUB_SHA" PYTHONDONTWRITEBYTECODE=1
           /srv/eq3venv/bin/python /srv/equal3/tools/run_test_groups.py
-          --research-dir /srv/equal3/research --require-no-skips --expect-total 430
+          --research-dir /srv/equal3/research --require-no-skips --expect-total 430 --expect-reported
           --json "$RUNNER_TEMP/test-groups-root.json"
+      - name: Keep the evidence JSON
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: test-groups-root
+          path: ${{ runner.temp }}/test-groups-root.json
+          if-no-files-found: error
+          retention-days: 90

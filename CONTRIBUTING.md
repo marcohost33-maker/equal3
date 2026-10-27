@@ -23,7 +23,9 @@ python tools/run_test_groups.py --expect-total 430
 ```
 
 `tools/run_test_groups.py` defines all test groups (CI uses it). Four separate-UID tests only run
-as root; see `verification/2026-10-27_linux/README.md` for staging a world-readable tree.
+as root; see `verification/2026-10-27_linux/README.md` for staging a world-readable tree. Keep
+`TMPDIR` at most 73 characters. If you change the research dependency, regenerate
+`tools/requirements-ci.lock` with hashes for every file of each release.
 
 ## Rules for changes
 
