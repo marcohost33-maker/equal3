@@ -44,7 +44,16 @@ research record; that decision does not change the NO-GO status and does not cre
   - Proposed fix: RFC 9162 checkpointed log ([ADR-002](ADR-002_checkpointed-audit-log.md)), with a
     tested prototype in `prototypes/merkle_audit_log/`.
   - Implementation needs its own research round.
-- P0-2, P0-3, P0-5 and P0-6 are unchanged and open.
+- **P0-3, 2026-10-27, mechanism prototyped, not operated.** `prototypes/witness_lab/` implements C2SP
+  signed checkpoints, Ed25519 checkpoint cosignatures and the tlog-witness `add-checkpoint` protocol
+  (atomic state, misbehaviour evidence). Its lab tests reproduce NR-01 (a joint local rollback is
+  cosigned by the restored local witness) and show the detection by external witnesses (409,
+  quorum, newer checkpoint visible). Still open:
+  - independently operated witnesses in another administrative domain;
+  - gossip between clients and monitors;
+  - timestamp/freshness policy;
+  - integration into the anchor (research round).
+- P0-2, P0-5 and P0-6 are unchanged and open.
 
 ## Release gates (RELEASE_GATES_V0722.json)
 

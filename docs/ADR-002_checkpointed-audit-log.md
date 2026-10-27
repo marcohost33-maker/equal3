@@ -58,7 +58,9 @@ cannot be updated incrementally. That is why every operation must rescan.
    tlog-witness). This is the mechanism P0-3 asks for: a joint rollback of store, anchor and local
    witness (NR-01) produces an older checkpoint that a witness holding a newer one rejects. This only
    helps if a witness outside the local administrative domain is consulted. This ADR does not supply
-   that witness.
+   that witness. The protocol side is prototyped and lab-tested in
+   [prototypes/witness_lab](../prototypes/witness_lab/README.md): joint local rollback reproduced, then
+   caught by external witnesses.
 5. **The same pattern for `StateStore.read()`.** Seal `(version, chain_tag)` as a checkpoint, verify
    only the tail since the last verified checkpoint per read, and move `PRAGMA integrity_check` and
    the full-chain check to the periodic audit.

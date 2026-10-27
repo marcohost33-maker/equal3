@@ -36,6 +36,16 @@ All research versions keep the release decision **NO-GO**. Version history of th
   that a local seal gives no anti-rewrite protection without an external checkpoint and that the
   audit interval must be derived from RPO/RTO and the threat model; benchmarks labelled exploratory.
 
+- P0-3 mechanism: `prototypes/witness_lab/`, covering C2SP signed-note, tlog-checkpoint,
+  tlog-cosignature (Ed25519, timestamped) and the tlog-witness `add-checkpoint` protocol with atomic
+  state, misbehaviour evidence and an HTTP front end. 18 tests:
+  - spec known answer (vkey `530d903a`);
+  - all status codes and a concurrency race;
+  - NR-01 joint-rollback lab, witness rollback with quorum, fork evidence;
+  - a separate-process HTTP witness.
+  Eight mutants were killed by hand. The HTTP test found a vkey parsing bug, fixed with a
+  regression test. Runs in the non-root CI job.
+
 ### Changed
 - CI runners pinned to ubuntu-24.04.
 - CI runs `anchor_wire` on every push/PR (was manual-only and never started) and adds a root job

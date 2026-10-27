@@ -74,6 +74,9 @@ jobs:
           --allow-skip test_writer_service_v0714.WriterBoundaryTests.test_real_linux_uid_boundary_separate_client
           --allow-skip test_anchor_v079.GroupSocketIsolationTests.test_separate_uid_can_connect_but_cannot_read_anchor
           --json "$RUNNER_TEMP/test-groups-nonroot.json"
+      - name: Witness lab (P0-3 prototype, needs cryptography)
+        if: ${{ !cancelled() }}
+        run: python -m unittest -v prototypes/witness_lab/test_witness_lab.py
       - name: Negative control, the WAL-reset gate holds on the runner's unpatched system SQLite
         if: ${{ !cancelled() }}
         run: python tools/check_sqlite_runtime.py --expect-gate hold --json "$RUNNER_TEMP/sqlite-runtime-system.json"
