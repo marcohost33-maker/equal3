@@ -8,11 +8,6 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
-    inputs:
-      run_anchor_wire:
-        description: "Also run the multi-process anchor_wire long-run group"
-        type: boolean
-        default: false
 
 permissions:
   contents: read
@@ -41,15 +36,18 @@ jobs:
         run: python tools/verify_provenance.py
       - name: Test the provenance checker
         run: python -m unittest -v tools/test_verify_provenance.py
+      - name: Test the test-group runner
+        run: python -m unittest -v tools/test_run_test_groups.py
 
   research-tests:
-    name: research test groups
+    # Groups, modules and the hang detector live in tools/run_test_groups.py (single source).
+    # anchor_wire runs on every push/PR since 2026-10-27: it passed 10/10 in about 11 s on Linux
+    # (verification/2026-10-27_linux/). A group over 300 s is killed and counts as a failure.
+    # Without root, 4 separate-UID isolation tests skip; the root job below runs them.
+    name: research test groups (non-root)
     needs: provenance
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    defaults:
-      run:
-        working-directory: research
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -58,70 +56,18 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: Install pinned research dependency
-        run: python -m pip install -r REQUIREMENTS_RESEARCH_GATE.txt
-      - name: Record runtime (Python, SQLite, cryptography, user)
-        run: python -c "import sys,sqlite3,cryptography,os,platform;print(sys.version);print('sqlite',sqlite3.sqlite_version);print('cryptography',cryptography.__version__);print('uid',os.geteuid());print(platform.platform())"
-      # Groups as in reports/audits/AUDIT_V0722.md. Historic durations per group were
-      # 1-37 s (evidence/v0.7.21/suite_summary.json); 5 min per group catches hangs.
-      # Every group runs even if an earlier one failed (!cancelled()), the job still fails.
-      - name: witness (focused, v0.7.22 request binding)
-        if: ${{ !cancelled() }}
-        timeout-minutes: 5
-        run: python -W error::ResourceWarning -m unittest -q test_commit_request_binding_v0722 test_external_commit_witness_v0720 test_commit_floor_expiry_v0721
-      - name: equal
-        if: ${{ !cancelled() }}
-        timeout-minutes: 5
-        run: python -W error::ResourceWarning -m unittest -q test_equal3 test_extensions test_fault_lab test_guarded_store test_release_preflight_v078 test_v0713_rollback
-      - name: store
-        if: ${{ !cancelled() }}
-        timeout-minutes: 5
-        run: python -W error::ResourceWarning -m unittest -q test_store test_v07 test_v071 test_v0710_security test_v0712_integrity test_v074_hardening test_witness
-      - name: runtime
-        if: ${{ !cancelled() }}
-        timeout-minutes: 5
-        run: python -W error::ResourceWarning -m unittest -q test_runtime_gate_v0711 test_sqlite_build_v0711
-      - name: writer
-        if: ${{ !cancelled() }}
-        timeout-minutes: 5
-        run: python -W error::ResourceWarning -m unittest -q test_writer_service_v0714
-      - name: coordinator
-        if: ${{ !cancelled() }}
-        timeout-minutes: 5
-        run: python -W error::ResourceWarning -m unittest -q test_anchored_writer_v0715
-      - name: attester
-        if: ${{ !cancelled() }}
-        timeout-minutes: 5
-        run: python -W error::ResourceWarning -m unittest -q test_attested_commit_v0716
-      - name: policy
-        if: ${{ !cancelled() }}
-        timeout-minutes: 5
-        run: python -W error::ResourceWarning -m unittest -q test_attester_policy_v0717
-      - name: rotation
-        if: ${{ !cancelled() }}
-        timeout-minutes: 5
-        run: python -W error::ResourceWarning -m unittest -q test_root_rotation_v0718
-      - name: epoch witness
-        if: ${{ !cancelled() }}
-        timeout-minutes: 5
-        run: python -W error::ResourceWarning -m unittest -q test_external_epoch_witness_v0719
-      - name: anchor base
-        if: ${{ !cancelled() }}
-        timeout-minutes: 5
-        run: python -W error::ResourceWarning -m unittest -q test_anchor_protocol test_anchor_v077 test_anchor_v078 test_anchor_v079
+        run: python -m pip install -r research/REQUIREMENTS_RESEARCH_GATE.txt
+      - name: All 12 groups, 430 tests expected
+        run: python tools/run_test_groups.py --expect-total 430 --json "$RUNNER_TEMP/test-groups-nonroot.json"
 
-  anchor-wire:
-    # Long run, excluded from push/PR runs: the multi-process anchor_wire group hung in the
-    # v0.7.22 audit environment (reports/audits/AUDIT_V0722.md). In v0.7.21 the whole anchor
-    # group incl. anchor_wire took 37 s, so 8 min is a hang detector, not an expected duration.
-    # A timeout is a failure, never a pass.
-    name: anchor_wire (manual long run)
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_anchor_wire }}
+  research-tests-root:
+    # The separate-UID tests (writer v0.7.14 x3, anchor socket v0.7.9 x1) drop to UID 65534.
+    # That UID cannot read $GITHUB_WORKSPACE under /home/runner, so the tree and a venv are
+    # staged world-readable under /srv first. Here a skip is a failure.
+    name: research test groups (root, separate-UID isolation)
     needs: provenance
     runs-on: ubuntu-latest
-    timeout-minutes: 10
-    defaults:
-      run:
-        working-directory: research
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -129,8 +75,16 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-      - name: Install pinned research dependency
-        run: python -m pip install -r REQUIREMENTS_RESEARCH_GATE.txt
-      - name: anchor_wire
-        timeout-minutes: 8
-        run: python -W error::ResourceWarning -m unittest -v test_anchor_wire
+      - name: Stage world-readable tree and venv
+        run: |
+          sudo install -d -m 0755 /srv/equal3
+          sudo cp -r research tools /srv/equal3/
+          sudo env "LD_LIBRARY_PATH=${LD_LIBRARY_PATH:-}" "$(command -v python)" -m venv /srv/eq3venv
+          sudo env "LD_LIBRARY_PATH=${LD_LIBRARY_PATH:-}" /srv/eq3venv/bin/python -m pip install -r research/REQUIREMENTS_RESEARCH_GATE.txt
+          sudo chmod -R a+rX /srv/equal3 /srv/eq3venv
+      - name: All 12 groups as root, 430 tests, no skips allowed
+        run: >
+          sudo env "LD_LIBRARY_PATH=${LD_LIBRARY_PATH:-}" "GITHUB_SHA=$GITHUB_SHA" PYTHONDONTWRITEBYTECODE=1
+          /srv/eq3venv/bin/python /srv/equal3/tools/run_test_groups.py
+          --research-dir /srv/equal3/research --require-no-skips --expect-total 430
+          --json "$RUNNER_TEMP/test-groups-root.json"

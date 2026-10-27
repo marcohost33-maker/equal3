@@ -3,6 +3,20 @@
 All research versions keep the release decision **NO-GO**. Version history of the research itself:
 [docs/AUDIT_HISTORY.md](docs/AUDIT_HISTORY.md) and the lineage table in the [README](README.md).
 
+## [Unreleased] — repository tooling, research content unchanged
+
+### Added
+- `tools/run_test_groups.py` with tests: single source for the 12 test groups, one process group
+  per group, 300 s hang limit (timeout and helper processes killed, counted as failure), fail-closed
+  summary parsing, `--require-no-skips`, `--expect-total`, JSON evidence.
+- `verification/2026-10-27_linux/`: Linux re-run from a byte-identical bundle reconstruction:
+  430/430 as root with 0 skips, `anchor_wire` 10/10 (about 11 s each).
+
+### Changed
+- CI runs `anchor_wire` on every push/PR (was manual-only and never started) and adds a root job
+  that must run all 430 tests with no skip, so the 4 separate-UID isolation tests run in CI for
+  the first time. The release decision stays NO-GO.
+
 ## [0.7.22-research] — repository assembled 2026-10-26
 
 ### Added

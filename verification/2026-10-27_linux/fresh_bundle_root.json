@@ -1,0 +1,218 @@
+{
+  "tool": "tools/run_test_groups.py",
+  "environment": {
+    "python": "3.13.17",
+    "sqlite": "3.45.1",
+    "cryptography": "46.0.4",
+    "euid": 0,
+    "platform": "Linux-6.18.44-fc-v165-x86_64-with-glibc2.39",
+    "commit": "4435627e7089a586e7307c781c7a928097c33d7a",
+    "runner_platform": "Linux-6.18.44-fc-v165-x86_64-with-glibc2.39"
+  },
+  "timeout_s": 300.0,
+  "require_no_skips": true,
+  "expect_total": 430,
+  "total_ran": 430,
+  "total_skipped": 0,
+  "passed": true,
+  "problems": [],
+  "groups": [
+    {
+      "name": "witness",
+      "modules": [
+        "test_commit_request_binding_v0722",
+        "test_external_commit_witness_v0720",
+        "test_commit_floor_expiry_v0721"
+      ],
+      "returncode": 0,
+      "duration_s": 1.425,
+      "status": "ok",
+      "ran": 29,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "detail": null,
+      "reported_v0722": 29
+    },
+    {
+      "name": "equal",
+      "modules": [
+        "test_equal3",
+        "test_extensions",
+        "test_fault_lab",
+        "test_guarded_store",
+        "test_release_preflight_v078",
+        "test_v0713_rollback"
+      ],
+      "returncode": 0,
+      "duration_s": 3.375,
+      "status": "ok",
+      "ran": 57,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "detail": null,
+      "reported_v0722": 57
+    },
+    {
+      "name": "store",
+      "modules": [
+        "test_store",
+        "test_v07",
+        "test_v071",
+        "test_v0710_security",
+        "test_v0712_integrity",
+        "test_v074_hardening",
+        "test_witness"
+      ],
+      "returncode": 0,
+      "duration_s": 6.678,
+      "status": "ok",
+      "ran": 96,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "detail": null,
+      "reported_v0722": 96
+    },
+    {
+      "name": "runtime",
+      "modules": [
+        "test_runtime_gate_v0711",
+        "test_sqlite_build_v0711"
+      ],
+      "returncode": 0,
+      "duration_s": 0.222,
+      "status": "ok",
+      "ran": 21,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "detail": null,
+      "reported_v0722": 21
+    },
+    {
+      "name": "writer",
+      "modules": [
+        "test_writer_service_v0714"
+      ],
+      "returncode": 0,
+      "duration_s": 0.943,
+      "status": "ok",
+      "ran": 21,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "detail": null,
+      "reported_v0722": 21
+    },
+    {
+      "name": "coordinator",
+      "modules": [
+        "test_anchored_writer_v0715"
+      ],
+      "returncode": 0,
+      "duration_s": 0.838,
+      "status": "ok",
+      "ran": 23,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "detail": null,
+      "reported_v0722": 23
+    },
+    {
+      "name": "attester",
+      "modules": [
+        "test_attested_commit_v0716"
+      ],
+      "returncode": 0,
+      "duration_s": 1.33,
+      "status": "ok",
+      "ran": 24,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "detail": null,
+      "reported_v0722": 24
+    },
+    {
+      "name": "policy",
+      "modules": [
+        "test_attester_policy_v0717"
+      ],
+      "returncode": 0,
+      "duration_s": 0.48,
+      "status": "ok",
+      "ran": 14,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "detail": null,
+      "reported_v0722": 14
+    },
+    {
+      "name": "rotation",
+      "modules": [
+        "test_root_rotation_v0718"
+      ],
+      "returncode": 0,
+      "duration_s": 1.051,
+      "status": "ok",
+      "ran": 28,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "detail": null,
+      "reported_v0722": 28
+    },
+    {
+      "name": "epoch_witness",
+      "modules": [
+        "test_external_epoch_witness_v0719"
+      ],
+      "returncode": 0,
+      "duration_s": 1.596,
+      "status": "ok",
+      "ran": 26,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "detail": null,
+      "reported_v0722": 26
+    },
+    {
+      "name": "anchor_base",
+      "modules": [
+        "test_anchor_protocol",
+        "test_anchor_v077",
+        "test_anchor_v078",
+        "test_anchor_v079"
+      ],
+      "returncode": 0,
+      "duration_s": 1.73,
+      "status": "ok",
+      "ran": 63,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "detail": null,
+      "reported_v0722": 63
+    },
+    {
+      "name": "anchor_wire",
+      "modules": [
+        "test_anchor_wire"
+      ],
+      "returncode": 0,
+      "duration_s": 11.135,
+      "status": "ok",
+      "ran": 28,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "detail": null,
+      "reported_v0722": 28
+    }
+  ]
+}

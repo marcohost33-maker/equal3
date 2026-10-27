@@ -19,10 +19,11 @@ python3.13 -m venv .venv && . .venv/bin/activate
 pip install -r research/REQUIREMENTS_RESEARCH_GATE.txt
 python tools/verify_provenance.py
 python -m unittest -v tools/test_verify_provenance.py
-cd research && python -B -W error::ResourceWarning -m unittest -q test_equal3
+python tools/run_test_groups.py --expect-total 430
 ```
 
-The CI workflow lists all test groups.
+`tools/run_test_groups.py` defines all test groups (CI uses it). Four separate-UID tests only run
+as root; see `verification/2026-10-27_linux/README.md` for staging a world-readable tree.
 
 ## Rules for changes
 
@@ -40,7 +41,7 @@ The CI workflow lists all test groups.
 
 - [ ] `python tools/verify_provenance.py` passes
 - [ ] `python -m unittest -v tools/test_verify_provenance.py` passes
-- [ ] affected test groups pass on Linux; skipped or hanging groups are stated
+- [ ] `python tools/run_test_groups.py --expect-total 430` passes on Linux; skips and root/non-root are stated
 - [ ] new behaviour has a negative-first test
 - [ ] no imported file changed; docs updated (CHANGELOG, AUDIT_HISTORY if a round is added)
 - [ ] no secrets, personal data or absolute user paths

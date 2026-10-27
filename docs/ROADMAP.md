@@ -23,6 +23,16 @@ research record; that decision does not change the NO-GO status and does not cre
 | P0-6 | KMS/HSM, data-protection inventory / Swiss FADP (CH-DSG), complete encryption at rest including backups, log privacy, VFS/power-loss lab. |
 | P1 | Runtime cost of the O(n) historical audit; authenticated checkpoints with adversarial proof tests; P50/P95/P99 at 10k/100k history. |
 
+### Status notes after the import (not part of the v0.7.22 roadmap)
+
+- **P0-1, 2026-10-27, partly addressed.** The negative-first request-binding test runs in CI on every
+  push/PR (it did since the import); `anchor_wire` now runs there too, and a root job runs the
+  separate-UID tests. The 430-test regression from a byte-identical reconstruction of the bundle
+  passed on Linux ([verification/2026-10-27_linux](../verification/2026-10-27_linux/README.md)).
+  Still open: why `anchor_wire` hung in the audit environment, and a run by someone outside
+  this channel ("independent CI" in the sense of the audits).
+- P0-2 to P0-6 and P1 are unchanged and open.
+
 ## Release gates (RELEASE_GATES_V0722.json)
 
 | Field | Value |
