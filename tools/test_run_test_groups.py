@@ -219,6 +219,12 @@ class PreflightTests(unittest.TestCase):
         base.update(kw)
         return base
 
+    def test_expected_sqlite_version(self):
+        env = self.env(sqlite='3.45.1', sqlite_library='/usr/lib/libsqlite3.so.0')
+        self.assertEqual(rtg.preflight(env, REPO / 'research', '3.45.1'), [])
+        problems = rtg.preflight(env, REPO / 'research', '3.54.1')
+        self.assertTrue(problems and '3.54.1' in problems[0], problems)
+
     def test_short_tmpdir_passes(self):
         self.assertEqual(rtg.preflight(self.env(), REPO / 'research'), [])
 
@@ -240,6 +246,11 @@ class PreflightTests(unittest.TestCase):
             link = private / 'python'
             link.symlink_to(sys.executable)
             problems = rtg.preflight(self.env(euid=0, executable=str(link)), REPO / 'research')
+            self.assertTrue(any(str(private) in p for p in problems), problems)
+            # a libsqlite3 in a private directory: the loader would skip it for UID 65534
+            lib = private / 'libsqlite3.so.0'
+            lib.write_bytes(b'x')
+            problems = rtg.preflight(self.env(euid=0, sqlite_library=str(lib)), REPO / 'research')
             self.assertTrue(any(str(private) in p for p in problems), problems)
             # the same layout is fine without root (the UID-drop tests skip there)
             self.assertEqual(rtg.preflight(self.env(euid=1000, tmpdir=str(private)), REPO / 'research'), [])

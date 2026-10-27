@@ -7,8 +7,10 @@ its own process group inside the research directory (the modules import each
 other flat, as shipped).
 
 Fail-closed (exit 1) when any of these holds:
-  - preflight: TMPDIR is too long for the AF_UNIX sockets the tests create, or,
-    as root, a path the UID-drop tests need is not reachable by other users;
+  - preflight: TMPDIR is too long for the AF_UNIX sockets the tests create;
+    as root, a path the UID-drop tests need (interpreter, modules, TMPDIR, the
+    loaded libsqlite3) is not reachable by other users; or --expect-sqlite is
+    set and a different SQLite version is loaded;
   - a group exits non-zero, or its unittest summary cannot be parsed;
   - a group exceeds --timeout (the whole process group is killed; a timeout is
     a failure, never a pass);
@@ -30,7 +32,7 @@ and counted under "skipped", so a non-root pass is weaker than a root pass.
 
 Usage: python tools/run_test_groups.py [--research-dir DIR] [--groups a,b]
        [--timeout S] [--json OUT] [--require-no-skips | --allow-skip ID ...]
-       [--expect-total N] [--expect-reported]
+       [--expect-total N] [--expect-reported] [--expect-sqlite VERSION]
 POSIX only (like the research code). Stdlib only, Python >= 3.9.
 """
 from __future__ import annotations
@@ -189,10 +191,15 @@ def run_group(name: str, modules, research_dir: Path, timeout: float, python: st
 def environment(python: str) -> dict:
     probe = ('import json,os,platform,sqlite3,sys,tempfile\n'
              'try:\n import cryptography; c=cryptography.__version__\nexcept ImportError: c=None\n'
+             'db=sqlite3.connect(":memory:");sid=db.execute("select sqlite_source_id()").fetchone()[0]\n'
+             'try:\n lib=[l.split()[-1] for l in open("/proc/self/maps") if "libsqlite3" in l][0]\n'
+             'except (OSError,IndexError): lib=None\n'
+             'db.close()\n'
              'print(json.dumps({"python":sys.version.split()[0],"sqlite":sqlite3.sqlite_version,'
+             '"sqlite_source_id":sid,"sqlite_library":lib,'
              '"cryptography":c,"euid":os.geteuid() if hasattr(os,"geteuid") else None,'
              '"platform":platform.platform(),"tmpdir":tempfile.gettempdir(),'
-             '"executable":sys.executable}))')
+             '"executable":sys.executable,"ld_library_path":os.environ.get("LD_LIBRARY_PATH")}))')
     try:
         env = json.loads(subprocess.run([python, '-c', probe], capture_output=True, text=True,
                                         timeout=60, check=True).stdout)
@@ -231,11 +238,14 @@ def _unreachable_for_others(path: Path, need_file_mode: int) -> list:
     return bad
 
 
-def preflight(env: dict, research_dir: Path) -> list:
+def preflight(env: dict, research_dir: Path, expect_sqlite=None) -> list:
     """Environment problems that would make test results meaningless; empty list if none."""
     if 'probe_error' in env:
         return ['interpreter probe failed: %s' % env['probe_error']]
     problems = []
+    if expect_sqlite is not None and env.get('sqlite') != expect_sqlite:
+        problems.append('SQLite %s is loaded (%s), expected %s' % (env.get('sqlite'), env.get('sqlite_library'),
+                                                                  expect_sqlite))
     tmpdir = env['tmpdir']
     if len(tmpdir) > MAX_TMPDIR_LEN:
         problems.append('TMPDIR %r has %d characters; the AF_UNIX socket paths of the tests need at most %d '
@@ -243,9 +253,13 @@ def preflight(env: dict, research_dir: Path) -> list:
     if env.get('euid') == 0:
         # The separate-UID tests drop to UID 65534 and then import the research modules,
         # run the interpreter and use TMPDIR; as root a failure there is an environment error.
+        # The SQLite library is included: a library UID 65534 cannot read is skipped by the
+        # dynamic loader, and the child silently falls back to another libsqlite3.
         bad = []
-        for path, file_mode in ((env['executable'], stat.S_IXOTH), (research_dir, stat.S_IROTH),
-                                (tmpdir, stat.S_IXOTH)):
+        paths = [(env['executable'], stat.S_IXOTH), (research_dir, stat.S_IROTH), (tmpdir, stat.S_IXOTH)]
+        if env.get('sqlite_library'):
+            paths.append((env['sqlite_library'], stat.S_IROTH))
+        for path, file_mode in paths:
             try:
                 bad += _unreachable_for_others(Path(path), file_mode)
             except OSError as exc:
@@ -295,6 +309,8 @@ def main(argv=None) -> int:
     ap.add_argument('--expect-total', type=int)
     ap.add_argument('--expect-reported', action='store_true',
                     help='every group must run exactly the count reported for v0.7.22')
+    ap.add_argument('--expect-sqlite', metavar='VERSION',
+                    help='the interpreter must load this SQLite version (guards against a silent fallback)')
     args = ap.parse_args(argv)
 
     if not (args.timeout > 0):
@@ -316,8 +332,9 @@ def main(argv=None) -> int:
     env = environment(args.python)
     evidence = {'tool': 'tools/run_test_groups.py', 'environment': env, 'timeout_s': args.timeout,
                 'require_no_skips': args.require_no_skips, 'allow_skips': sorted(args.allow_skip),
-                'expect_total': args.expect_total, 'expect_reported': args.expect_reported}
-    problems = preflight(env, research_dir)
+                'expect_total': args.expect_total, 'expect_reported': args.expect_reported,
+                'expect_sqlite': args.expect_sqlite}
+    problems = preflight(env, research_dir, args.expect_sqlite)
     results = []
     if not problems:
         for name, modules, reported in selected:
