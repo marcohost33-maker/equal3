@@ -10,8 +10,11 @@ The RFC 9162 prototype verifies a consistency proof from 10 000 to 100 000 event
 (14 hashes). Design proposal: [docs/ADR-002](../../docs/ADR-002_checkpointed-audit-log.md).
 The release decision stays **NO-GO**.
 
-This folder is not part of the import. Produced in the Claude Code maintenance channel. The numbers
-come from one machine and show growth, not a service-level guarantee.
+This folder is not part of the import. Produced in the Claude Code maintenance channel.
+
+**Exploratory measurement.** One machine, N = 30 to 100 per point. Treat P99 as an indication: at
+N = 30 it is the maximum (nearest rank), not a tail estimate. The numbers show growth, not a
+service-level guarantee. A tail claim would need a few hundred samples per point and repeated runs.
 
 ## Method
 

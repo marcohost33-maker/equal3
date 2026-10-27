@@ -18,6 +18,9 @@ concurrency:
 
 env:
   PYTHONDONTWRITEBYTECODE: "1"
+  # The tested tree of a pull_request run is the merge commit (GITHUB_SHA); the evidence also
+  # records the PR head it was built from.
+  EQ3_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
   PYTHON_VERSION: "3.13"   # research environment: Python 3.13.5 (reports/misc/ENVIRONMENT_V077.json)
 
 jobs:
@@ -109,16 +112,24 @@ jobs:
           sudo chmod -R a+rX /srv/equal3 /srv/eq3venv
       - name: All 12 groups as root, 430 tests, no skips allowed
         run: >
-          sudo env "LD_LIBRARY_PATH=${LD_LIBRARY_PATH:-}" "GITHUB_SHA=$GITHUB_SHA" PYTHONDONTWRITEBYTECODE=1
+          sudo env "LD_LIBRARY_PATH=${LD_LIBRARY_PATH:-}" "GITHUB_SHA=$GITHUB_SHA" "GITHUB_REF=$GITHUB_REF" "GITHUB_RUN_ID=$GITHUB_RUN_ID" "GITHUB_EVENT_NAME=$GITHUB_EVENT_NAME" "EQ3_PR_HEAD_SHA=$EQ3_PR_HEAD_SHA" PYTHONDONTWRITEBYTECODE=1
           /srv/eq3venv/bin/python /srv/equal3/tools/run_test_groups.py
           --research-dir /srv/equal3/research --require-no-skips --expect-total 430 --expect-reported
           --json "$RUNNER_TEMP/test-groups-root.json"
+      - name: The system SQLite is mapped by a child dropped to UID 65534 too; the WAL-reset gate holds
+        if: ${{ !cancelled() }}
+        run: >
+          sudo env "LD_LIBRARY_PATH=${LD_LIBRARY_PATH:-}"
+          /srv/eq3venv/bin/python /srv/equal3/tools/check_sqlite_runtime.py --expect-gate hold
+          --check-child-uid 65534 --json "$RUNNER_TEMP/sqlite-runtime-root.json"
       - name: Keep the evidence JSON
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: test-groups-root
-          path: ${{ runner.temp }}/test-groups-root.json
+          path: |
+            ${{ runner.temp }}/test-groups-root.json
+            ${{ runner.temp }}/sqlite-runtime-root.json
           if-no-files-found: error
           retention-days: 90
 
@@ -163,16 +174,16 @@ jobs:
           sudo chmod -R a+rX /srv/equal3 /srv/eq3venv
           cp "$RUNNER_TEMP/sqlite-build/build_evidence.json" "$RUNNER_TEMP/sqlite-build-evidence.json"
           echo "SQLITE_LIB_SHA256=$(python -c 'import json,sys; print(json.load(open(sys.argv[1]))["shared_library_sha256"])' "$RUNNER_TEMP/sqlite-build-evidence.json")" >> "$GITHUB_ENV"
-      - name: SQLite 3.54.1 is the mapped library and the WAL-reset gate opens without override
+      - name: SQLite 3.54.1 is mapped by this process and by a child dropped to UID 65534; the WAL-reset gate opens
         run: >
           sudo env "LD_LIBRARY_PATH=$SQLITE_LIB_DIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
           /srv/eq3venv/bin/python /srv/equal3/tools/check_sqlite_runtime.py --expect-gate open
           --expect-version 3.54.1 --expect-source-id "$SQLITE_SOURCE_ID"
           --expect-library "$SQLITE_LIB_DIR/libsqlite3.so.0" --expect-library-sha256 "$SQLITE_LIB_SHA256"
-          --json "$RUNNER_TEMP/sqlite-runtime-3.54.1.json"
+          --check-child-uid 65534 --json "$RUNNER_TEMP/sqlite-runtime-3.54.1.json"
       - name: All 12 groups as root on SQLite 3.54.1, 430 tests, no skips allowed
         run: >
-          sudo env "LD_LIBRARY_PATH=$SQLITE_LIB_DIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" "GITHUB_SHA=$GITHUB_SHA" PYTHONDONTWRITEBYTECODE=1
+          sudo env "LD_LIBRARY_PATH=$SQLITE_LIB_DIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" "GITHUB_SHA=$GITHUB_SHA" "GITHUB_REF=$GITHUB_REF" "GITHUB_RUN_ID=$GITHUB_RUN_ID" "GITHUB_EVENT_NAME=$GITHUB_EVENT_NAME" "EQ3_PR_HEAD_SHA=$EQ3_PR_HEAD_SHA" PYTHONDONTWRITEBYTECODE=1
           /srv/eq3venv/bin/python /srv/equal3/tools/run_test_groups.py
           --research-dir /srv/equal3/research --require-no-skips --expect-total 430 --expect-reported
           --expect-sqlite 3.54.1 --json "$RUNNER_TEMP/test-groups-sqlite-3.54.1.json"

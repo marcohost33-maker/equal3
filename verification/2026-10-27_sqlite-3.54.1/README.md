@@ -66,6 +66,17 @@ artifact `sqlite-3.54.1` (90 days) contains three files:
 | regression | 12 groups, **430 run, 0 skipped**, 0 leftover processes, euid 0, Python 3.13.16 |
 | negative control | system SQLite of ubuntu-24.04: gate holds, version policy FAIL |
 
+## Addendum after the cross-family review (2026-10-27)
+
+GPT-6 (007acc2, session 45283d7d) asked for proof that a child dropped to UID 65534 maps the
+patched library, not only the parent. `tools/check_sqlite_runtime.py --check-child-uid 65534` now
+starts such a child the way the separate-UID tests do. The check requires the child to map the same
+file with the same version and source id. Locally it detects the silent fallback: with the library
+in a 0700 directory, the parent mapped the private copy and the child mapped the system SQLite.
+Both root CI jobs run it. The same review noted that `GITHUB_SHA` of a pull_request run is the
+merge commit, not the PR head; the runner evidence now records both (`environment.ci`). The
+first CI run with these checks is the evidence for them, not this paragraph.
+
 ## What this does not show
 
 - **No build attestation.** The SHA3 pins prove that the source bytes are the published ones, not who

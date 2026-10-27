@@ -30,6 +30,12 @@ All research versions keep the release decision **NO-GO**. Version history of th
 - Runner: records the mapped libsqlite3 and source id, `--expect-sqlite`; as root the loaded library
   must be readable by other users (the loader otherwise falls back silently, measured).
 
+- After the GPT-6 cross-family review: `check_sqlite_runtime.py --check-child-uid` (a child dropped
+  to UID 65534 must map the same libsqlite3 as the parent; both root jobs); runner evidence records
+  `GITHUB_SHA` (merge commit on pull requests) and the PR head SHA, ref and run id; ADR-002 states
+  that a local seal gives no anti-rewrite protection without an external checkpoint and that the
+  audit interval must be derived from RPO/RTO and the threat model; benchmarks labelled exploratory.
+
 ### Changed
 - CI runners pinned to ubuntu-24.04.
 - CI runs `anchor_wire` on every push/PR (was manual-only and never started) and adds a root job

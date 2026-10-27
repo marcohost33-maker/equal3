@@ -63,6 +63,34 @@ class EvaluateTests(unittest.TestCase):
         self.assertTrue(csr.evaluate(rep, expect_gate='open', library=LIB))
 
 
+class ChildTests(unittest.TestCase):
+    def child(self, **kw):
+        base = {'euid': 65534, 'sqlite_version': '3.54.1', 'sqlite_source_id': SOURCE, 'mapped': [LIB]}
+        base.update(kw)
+        return base
+
+    def test_child_mapping_same_library(self):
+        self.assertEqual(csr.evaluate_child(report(), self.child(), 65534), [])
+
+    def test_child_fallback_is_detected(self):
+        # the loader skipped the unreadable library and mapped the system SQLite instead
+        fallback = self.child(mapped=['/usr/lib/x86_64-linux-gnu/libsqlite3.so.0.8.6'], sqlite_version='3.45.1')
+        problems = csr.evaluate_child(report(), fallback, 65534)
+        self.assertEqual(len(problems), 2, problems)
+
+    def test_child_must_run_as_the_dropped_uid_and_map_one_library(self):
+        self.assertTrue(csr.evaluate_child(report(), self.child(euid=0), 65534))
+        self.assertTrue(csr.evaluate_child(report(), self.child(mapped=[LIB, '/other/libsqlite3.so.0']), 65534))
+        self.assertTrue(csr.evaluate_child(report(), self.child(mapped=[]), 65534))
+
+    def test_real_child_without_uid_drop(self):
+        import os
+        import sqlite3
+        child = csr.child_mapping(None)
+        self.assertEqual((child['euid'], child['sqlite_version']), (os.geteuid(), sqlite3.sqlite_version))
+        self.assertEqual(len(child['mapped']), 1, child)
+
+
 class MainTests(unittest.TestCase):
     def test_inspection_failure_is_never_a_pass(self):
         import tempfile

@@ -17,7 +17,8 @@ Two checks run over the whole history on every operation:
 - `StateStore.read()` (`research/state_store.py`) re-verifies the whole HMAC receipt chain and runs
   `PRAGMA integrity_check` on every authenticated read.
 
-Measured on 2026-10-27 (nearest-rank percentiles, Linux, Python 3.13.17, SQLite 3.45.1):
+Measured on 2026-10-27 (exploratory: one machine, N = 30 to 100 per point, nearest-rank
+percentiles, so P99 at N = 30 is the maximum, not a tail estimate; Linux, Python 3.13.17, SQLite 3.45.1):
 
 | Operation | 1 000 | 10 000 | 100 000 |
 |---|---:|---:|---:|
@@ -42,6 +43,11 @@ cannot be updated incrementally. That is why every operation must rescan.
 2. **The seal binds the checkpoint `(tree_size, root)`** instead of a full-scan digest. Each
    operation appends its events and checks the step from the sealed checkpoint to the new one.
    That costs O(log n): the frontier update, or a consistency proof between the two checkpoints.
+   **This step alone gives no protection against rewriting history.** Whoever can rewrite the
+   ledger and recompute the seal (the local rollback domain of NR-01: same host, same seal key)
+   produces a new, self-consistent `(tree_size, root)`. Only a checkpoint kept outside that domain
+   (item 4) can contradict it. Locally, the seal only guards against accidental or partial
+   corruption, as the full-scan digest does today.
 3. **The full audit moves out of the hot path.** A periodic full verification recomputes the root
    from all stored rows and compares it with the sealed checkpoint; a mismatch sets HOLD. Rows that
    an operation actually depends on (e.g. a nonce lookup) are checked by an inclusion proof against
@@ -72,6 +78,12 @@ cannot be updated incrementally. That is why every operation must rescan.
   with an inclusion proof, not at the next operation. The audit interval becomes a security
   parameter. The research's negative-first test for tampered historical rows must move to the
   periodic audit and stay mandatory.
+  - The interval must be **derived, not picked**: from the accepted detection window (how long an
+    undetected manipulation may persist), the recovery point and recovery time objectives (RPO/RTO)
+    of the store, and the threat model of who can write the database files.
+  - At the measured 9 µs per row, a full audit of 100 000 rows costs about 1 s, so the interval is
+    limited by policy, not by cost.
+  - This ADR leaves the number open on purpose; the implementing round must justify it.
 - Event ordering changes from "sorted by nonce" to "insertion order". This is a format change and
   needs a migration with an explicit checkpoint of the migrated history.
 - Proof generation in the prototype recomputes subtree hashes (O(n)). An implementation stores

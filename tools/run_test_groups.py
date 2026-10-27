@@ -213,6 +213,11 @@ def environment(python: str) -> dict:
         except (OSError, subprocess.SubprocessError):
             commit = None
     env['commit'] = commit
+    # On pull_request events GITHUB_SHA is the synthetic merge commit of head and base, not the
+    # PR head. Record both, plus ref and run, so the evidence names exactly what was tested.
+    env['ci'] = {k.lower(): os.environ.get(k) for k in
+                 ('GITHUB_SHA', 'GITHUB_REF', 'GITHUB_RUN_ID', 'GITHUB_EVENT_NAME', 'EQ3_PR_HEAD_SHA')
+                 if os.environ.get(k)} or None
     return env
 
 
