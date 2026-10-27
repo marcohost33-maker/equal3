@@ -373,5 +373,94 @@ class HttpWitnessProcess(TempDirTest):
             proc.stdout.close()
 
 
+class RecordingWitness:
+    """Stands in for Witness: records every body the HTTP layer hands over."""
+    trusted = {}
+
+    def __init__(self):
+        self.bodies = []
+
+    def add_checkpoint(self, body):
+        self.bodies.append(body)
+        return 200, 'ok\n'
+
+
+class HttpFraming(unittest.TestCase):
+    """RFC 9112 section 6 message framing of POST /add-checkpoint (negative first)."""
+
+    def setUp(self):
+        import http_witness
+        self.witness = RecordingWitness()
+        handler = http_witness.make_handler(self.witness, timeout=0.5)
+        self.server = http_witness.ThreadingHTTPServer(('127.0.0.1', 0), handler)
+        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        self.thread.start()
+
+    def tearDown(self):
+        self.server.shutdown()
+        self.server.server_close()
+        self.thread.join(timeout=10)
+
+    def exchange(self, head, body=b'', half_close=True):
+        import socket
+        with socket.create_connection(self.server.server_address, timeout=10) as s:
+            s.sendall(b'POST /add-checkpoint HTTP/1.1\r\nHost: lab\r\n' + head + b'\r\n' + body)
+            if half_close:
+                s.shutdown(socket.SHUT_WR)
+            data = b''
+            while True:
+                chunk = s.recv(65536)
+                if not chunk:
+                    break
+                data += chunk
+        status = int(data.split(b' ', 2)[1]) if data.startswith(b'HTTP/') else None
+        return status, data
+
+    def assert_rejected(self, head, body, status):
+        got, raw = self.exchange(head, body)
+        self.assertEqual(got, status, raw)
+        self.assertEqual(self.witness.bodies, [], 'a rejected request reached the witness')
+
+    def test_well_formed_body_reaches_the_witness(self):
+        self.assertEqual(self.exchange(b'Content-Length: 5\r\n', b'hello')[0], 200)
+        self.assertEqual(self.witness.bodies, [b'hello'])
+
+    def test_content_length_must_be_ascii_digits(self):
+        # int() accepts all of these; RFC 9112 Content-Length = 1*DIGIT does not
+        for value in (b'abc', b'+5', b'5_0', b' 5 5', b'0x5', b'-5', b'5.0', '５'.encode()):
+            with self.subTest(value=value):
+                self.assert_rejected(b'Content-Length: ' + value + b'\r\n', b'hello', 400)
+
+    def test_empty_body_rejected(self):
+        self.assert_rejected(b'Content-Length: 0\r\n', b'', 400)
+
+    def test_duplicate_or_list_content_length_rejected(self):
+        self.assert_rejected(b'Content-Length: 5\r\nContent-Length: 6\r\n', b'hello!', 400)
+        self.assert_rejected(b'Content-Length: 5\r\nContent-Length: 5\r\n', b'hello', 400)
+        self.assert_rejected(b'Content-Length: 5, 5\r\n', b'hello', 400)
+
+    def test_transfer_encoding_rejected(self):
+        self.assert_rejected(b'Transfer-Encoding: chunked\r\nContent-Length: 5\r\n', b'5\r\nhello\r\n0\r\n\r\n', 400)
+        self.assert_rejected(b'Transfer-Encoding: chunked\r\n', b'5\r\nhello\r\n0\r\n\r\n', 501)
+
+    def test_missing_content_length_rejected(self):
+        self.assert_rejected(b'', b'hello', 411)
+
+    def test_oversized_body_rejected_before_reading(self):
+        import http_witness
+        self.assert_rejected(b'Content-Length: %d\r\n' % (http_witness.MAX_BODY + 1), b'', 413)
+        self.assert_rejected(b'Content-Length: ' + b'9' * 5000 + b'\r\n', b'', 413)
+
+    def test_truncated_body_never_reaches_the_witness(self):
+        # the client announces 100 bytes, sends 10 and closes its side
+        self.assert_rejected(b'Content-Length: 100\r\n', b'0123456789', 400)
+
+    def test_stalled_body_times_out(self):
+        # the client announces 100 bytes, sends 10 and keeps the connection open
+        got, raw = self.exchange(b'Content-Length: 100\r\n', b'0123456789', half_close=False)
+        self.assertEqual(got, 408, raw)
+        self.assertEqual(self.witness.bodies, [])
+
+
 if __name__ == '__main__':
     unittest.main()

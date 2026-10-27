@@ -14,12 +14,12 @@ From the C2SP editor's copies (github.com/C2SP/C2SP @ `fea9004`, fetched 2026-10
 |---|---|---|
 | `note.py` | signed-note, tlog-checkpoint, tlog-cosignature | strict note parsing (UTF-8, no control characters, canonical base64, key-name rules); key IDs; vkeys; Ed25519 log signatures (type 0x01); timestamped Ed25519 checkpoint cosignatures (type 0x04, `cosignature/v1` + `time <t>` + checkpoint text) |
 | `witness.py` | tlog-witness `add-checkpoint` | 400 / 403 / 404 / 409 (`text/x.tlog.size` body) / 422 / 200; old-size check and persistence in one `BEGIN IMMEDIATE` transaction; rejected but validly signed requests kept as misbehaviour evidence |
-| `http_witness.py` | tlog-witness HTTP | `POST /add-checkpoint`, `GET /<sha256(origin)>/checkpoint`; stdlib, 127.0.0.1 only |
+| `http_witness.py` | tlog-witness HTTP, RFC 9112 §6 framing | `POST /add-checkpoint`, `GET /<sha256(origin)>/checkpoint`; stdlib, 127.0.0.1 only; one Content-Length of ASCII digits, no Transfer-Encoding, size limit, complete body before the witness sees it, socket timeout |
 | `lab_log.py` | — | log operator on the RFC 9162 tree of `../merkle_audit_log`; client policy: log signature **and** a quorum of witness cosignatures **and** consistency with the largest checkpoint accepted before |
 
 ## Results
 
-`test_witness_lab.py`, 18 tests, run as root and non-root:
+`test_witness_lab.py`, 27 tests, run as root and non-root:
 
 | Scenario | Outcome |
 |---|---|
@@ -33,8 +33,9 @@ From the C2SP editor's copies (github.com/C2SP/C2SP @ `fea9004`, fetched 2026-10
 | one external witness rolled back as well | that witness cosigns the fork, the other refuses; quorum 1 accepts, **quorum 2 rejects** |
 | client that already accepted size 20 | rejects a forked 25 and an older 10 (`RollbackDetected`) |
 | witness as a separate process over HTTP | 200, 409 with `text/x.tlog.size`, monitoring GET returns log signature and witness cosignature |
+| HTTP framing: Content-Length `abc`, `+5`, `5_0`, `-5`, `0x5`, full-width digit; duplicate or list value; Transfer-Encoding with / without Content-Length; missing; 0; > 64 KiB or 5000 digits; truncated body; stalled body | 400; 400; 400 / 501; 411; 400; 413; 400; 408. No rejected request reaches the witness. |
 
-**Mutation checks**, each run by hand against a copy of the code. All 8 mutants are killed:
+**Mutation checks**, each run by hand against a copy of the code. All 16 mutants are killed:
 - vkey split on every `+`;
 - `BEGIN DEFERRED` instead of `IMMEDIATE`;
 - old size accepted when smaller;
@@ -42,10 +43,19 @@ From the C2SP editor's copies (github.com/C2SP/C2SP @ `fea9004`, fetched 2026-10
 - same-size root not compared;
 - note accepted without a known signature;
 - client quorum ignored;
-- cosignature verified without the time line.
+- cosignature verified without the time line;
+- HTTP framing (8): `int()` instead of the digit check, no length check after reading, first of
+  duplicate Content-Length used, Transfer-Encoding ignored, no timeout handling, zero length
+  allowed, size limit unchecked, no socket timeout.
 
 The HTTP test found a real bug before release: the base64 part of a vkey can contain `+`, so the
 vkey must be split at the first two `+` only.
+
+The cross-family review R3/R5 (2026-10-27, P1) found that the HTTP front end did not frame requests
+strictly: `int(Content-Length or 0)` accepted `+5` and `5_0`, crashed on non-numeric values, and a
+truncated body reached the witness. The framing tests were written first and were red on the
+unchanged server (8 of 9 tests, 14 failing cases); the fix is an independent implementation, not
+the reviewer's patch file.
 
 ## What this does not show
 

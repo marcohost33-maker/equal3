@@ -4,6 +4,10 @@ POST /add-checkpoint            body as in witness.parse_request; 409 uses text/
 GET  /<sha256(origin) hex>/checkpoint   latest cosigned checkpoint with the stored log note
                                          and a fresh witness cosignature (404 if none)
 
+Request framing follows RFC 9112 section 6 strictly: one Content-Length of ASCII digits, no
+Transfer-Encoding, at most MAX_BODY bytes, the whole body read before the witness sees it, and a
+socket timeout (408 if the body stalls). Every framing error closes the connection.
+
 Lab use only: binds to 127.0.0.1, no TLS, no rate limits. Run:
   python http_witness.py --db DIR/witness.sqlite --port 0 --witness-key-file KEY \
          --name witness.example/w1 --log-vkey <vkey> [--log-vkey ...]
@@ -13,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import re
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -23,9 +28,39 @@ import note as n
 from witness import Witness
 
 MAX_BODY = 64 * 1024
+DIGITS = re.compile(r'[0-9]{1,20}')
+OWS = ' \t'
 
 
-def make_handler(witness: Witness):
+def body_length(headers):
+    """Return (status, message) for a request whose body cannot be framed, else (None, length).
+
+    RFC 9112 section 6: Content-Length = 1*DIGIT, a single value; Transfer-Encoding is not supported
+    here, and together with Content-Length it is a framing error (section 6.3, item 3).
+    """
+    if headers.get_all('Transfer-Encoding'):
+        if headers.get_all('Content-Length'):
+            return 400, 'Transfer-Encoding with Content-Length\n'
+        return 501, 'Transfer-Encoding not supported\n'
+    values = headers.get_all('Content-Length') or []
+    if not values:
+        return 411, 'Content-Length required\n'
+    if len(values) != 1:
+        return 400, 'more than one Content-Length\n'
+    value = values[0].strip(OWS)
+    if len(value) > 20 and value.isascii() and value.isdigit():
+        return 413, 'body too large\n'
+    if not DIGITS.fullmatch(value):
+        return 400, 'invalid Content-Length\n'
+    length = int(value)
+    if length == 0:
+        return 400, 'empty body\n'
+    if length > MAX_BODY:
+        return 413, 'body too large\n'
+    return None, length
+
+
+def make_handler(witness: Witness, timeout: float = 5.0):
     class Handler(BaseHTTPRequestHandler):
         def _send(self, status: int, body: str, content_type: str = 'text/plain; charset=utf-8'):
             data = body.encode('utf-8')
@@ -38,10 +73,20 @@ def make_handler(witness: Witness):
         def do_POST(self):
             if self.path != '/add-checkpoint':
                 return self._send(404, 'not found\n')
-            length = int(self.headers.get('Content-Length') or 0)
-            if not 0 < length <= MAX_BODY:
-                return self._send(400, 'body size\n')
-            status, body = witness.add_checkpoint(self.rfile.read(length))
+            status, length_or_error = body_length(self.headers)
+            if status is not None:
+                self.close_connection = True
+                return self._send(status, length_or_error)
+            length = length_or_error
+            try:
+                data = self.rfile.read(length)
+            except TimeoutError:
+                self.close_connection = True
+                return self._send(408, 'request body timed out\n')
+            if len(data) != length:
+                self.close_connection = True
+                return self._send(400, 'incomplete body\n')
+            status, body = witness.add_checkpoint(data)
             self._send(status, body, 'text/x.tlog.size' if status == 409 else 'text/plain; charset=utf-8')
 
         def do_GET(self):
@@ -61,6 +106,7 @@ def make_handler(witness: Witness):
         def log_message(self, *args):  # keep test output clean
             pass
 
+    Handler.timeout = timeout  # socket timeout for request line, headers and body (StreamRequestHandler)
     return Handler
 
 

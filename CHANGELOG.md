@@ -38,13 +38,24 @@ All research versions keep the release decision **NO-GO**. Version history of th
 
 - P0-3 mechanism: `prototypes/witness_lab/`, covering C2SP signed-note, tlog-checkpoint,
   tlog-cosignature (Ed25519, timestamped) and the tlog-witness `add-checkpoint` protocol with atomic
-  state, misbehaviour evidence and an HTTP front end. 18 tests:
+  state, misbehaviour evidence and an HTTP front end. 27 tests:
   - spec known answer (vkey `530d903a`);
   - all status codes and a concurrency race;
   - NR-01 joint-rollback lab, witness rollback with quorum, fork evidence;
-  - a separate-process HTTP witness.
-  Eight mutants were killed by hand. The HTTP test found a vkey parsing bug, fixed with a
+  - a separate-process HTTP witness;
+  - HTTP request framing (RFC 9112 section 6).
+  Sixteen mutants were killed by hand. The HTTP test found a vkey parsing bug, fixed with a
   regression test. Runs in the non-root CI job.
+
+### Fixed
+- `prototypes/witness_lab/http_witness.py` request framing, reported by the cross-family review
+  R3/R5 (P1). `int(Content-Length or 0)` accepted `+5` and `5_0`, raised an unhandled `ValueError`
+  on non-numeric values, used the first of duplicate headers, ignored `Transfer-Encoding`, and
+  passed a truncated body to the witness. Now: exactly one Content-Length of ASCII digits, no
+  Transfer-Encoding (400 together with Content-Length, else 501), 411 / 413 / 400 for a missing,
+  oversized or incomplete body, 408 after a socket timeout, connection closed on every framing
+  error. Nine negative-first tests were red on the unchanged server (14 failing cases) and are green
+  after the fix; eight mutants of the fix are killed.
 
 - P0-2 analysis: `docs/ADR-003` (proposed). Measured import graph: every service path imports
   `state_store` (legacy API), and there is an import cycle among the anchor modules. No production
