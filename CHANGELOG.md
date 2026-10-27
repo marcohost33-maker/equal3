@@ -46,6 +46,12 @@ All research versions keep the release decision **NO-GO**. Version history of th
   Eight mutants were killed by hand. The HTTP test found a vkey parsing bug, fixed with a
   regression test. Runs in the non-root CI job.
 
+- P0-2 analysis: `docs/ADR-003` (proposed). Measured import graph: every service path imports
+  `state_store` (legacy API), and there is an import cycle among the anchor modules. No production
+  path exists today; the OS boundary is the current enforcement. The ADR proposes an engine/legacy
+  split, a writer capability, an allowlist distribution with an import-closure check, and OS policy,
+  with negative-first acceptance tests.
+
 ### Changed
 - CI runners pinned to ubuntu-24.04.
 - CI runs `anchor_wire` on every push/PR (was manual-only and never started) and adds a root job

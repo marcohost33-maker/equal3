@@ -53,7 +53,16 @@ research record; that decision does not change the NO-GO status and does not cre
   - gossip between clients and monitors;
   - timestamp/freshness policy;
   - integration into the anchor (research round).
-- P0-2, P0-5 and P0-6 are unchanged and open.
+- **P0-2, 2026-10-27, analysed, design proposed** ([ADR-003](ADR-003_production-surface-legacy-bypass.md)).
+  - No production start path exists: `serve()` HOLDs without the research flag.
+  - Every service module imports `state_store`, which is also the legacy direct-write API, so
+    excluding legacy modules by import is impossible in the current layout.
+  - The boundary today is the OS: separate UID, DB 0600 owned by the writer. The UID tests now run
+    as root in CI.
+  - Remaining bypass: code running as the writer UID can call `StateStore.apply()`.
+  - Proposed: split engine and legacy shim, writer capability, allowlist distribution with an
+    import-closure check, OS policy for the writer UID.
+- P0-5 and P0-6 are unchanged and open.
 
 ## Release gates (RELEASE_GATES_V0722.json)
 
