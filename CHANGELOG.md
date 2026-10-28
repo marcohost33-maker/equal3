@@ -38,13 +38,13 @@ All research versions keep the release decision **NO-GO**. Version history of th
 
 - P0-3 mechanism: `prototypes/witness_lab/`, covering C2SP signed-note, tlog-checkpoint,
   tlog-cosignature (Ed25519, timestamped) and the tlog-witness `add-checkpoint` protocol with atomic
-  state, misbehaviour evidence and an HTTP front end. 27 tests:
+  state, misbehaviour evidence and an HTTP front end. 29 tests:
   - spec known answer (vkey `530d903a`);
   - all status codes and a concurrency race;
   - NR-01 joint-rollback lab, witness rollback with quorum, fork evidence;
   - a separate-process HTTP witness;
-  - HTTP request framing (RFC 9112 section 6).
-  Sixteen mutants were killed by hand. The HTTP test found a vkey parsing bug, fixed with a
+  - HTTP request framing (RFC 9112 section 6) and connection reuse (section 9.3).
+  Seventeen mutants were killed by hand. The HTTP test found a vkey parsing bug, fixed with a
   regression test. Runs in the non-root CI job.
 
 ### Fixed
@@ -56,6 +56,12 @@ All research versions keep the release decision **NO-GO**. Version history of th
   oversized or incomplete body, 408 after a socket timeout, connection closed on every framing
   error. Nine negative-first tests were red on the unchanged server (14 failing cases) and are green
   after the fix; eight mutants of the fix are killed.
+- `http_witness.py` connection reuse, reported by the cross-family reviews R5/R9/R10 (latent: the
+  server speaks HTTP/1.0). With HTTP/1.1 keep-alive enabled, a 404 for a wrong path left the request
+  body unread and the server parsed it as a second request (two responses). Every error response
+  (>= 400) now sends `Connection: close` and closes the connection (RFC 9112 section 9.3). Two tests:
+  red on `a7c6e50` (3 failing cases), green after the fix; keep-alive still serves well-formed
+  requests; one mutant killed.
 
 - P0-2 analysis: `docs/ADR-003` (proposed). Measured import graph: every service path imports
   `state_store` (legacy API), and there is an import cycle among the anchor modules. No production

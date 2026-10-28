@@ -6,7 +6,8 @@ GET  /<sha256(origin) hex>/checkpoint   latest cosigned checkpoint with the stor
 
 Request framing follows RFC 9112 section 6 strictly: one Content-Length of ASCII digits, no
 Transfer-Encoding, at most MAX_BODY bytes, the whole body read before the witness sees it, and a
-socket timeout (408 if the body stalls). Every framing error closes the connection.
+socket timeout (408 if the body stalls). Every error response (>= 400) sends
+"Connection: close" and closes the connection, so unread body bytes are never parsed as a request.
 
 Lab use only: binds to 127.0.0.1, no TLS, no rate limits. Run:
   python http_witness.py --db DIR/witness.sqlite --port 0 --witness-key-file KEY \
@@ -65,6 +66,10 @@ def make_handler(witness: Witness, timeout: float = 5.0):
         def _send(self, status: int, body: str, content_type: str = 'text/plain; charset=utf-8'):
             data = body.encode('utf-8')
             self.send_response(status)
+            if status >= 400:
+                # an error may leave request body bytes unread; never reuse the connection
+                # (RFC 9112 section 9.3). send_header sets close_connection for this header.
+                self.send_header('Connection', 'close')
             self.send_header('Content-Type', content_type)
             self.send_header('Content-Length', str(len(data)))
             self.end_headers()
@@ -75,16 +80,13 @@ def make_handler(witness: Witness, timeout: float = 5.0):
                 return self._send(404, 'not found\n')
             status, length_or_error = body_length(self.headers)
             if status is not None:
-                self.close_connection = True
                 return self._send(status, length_or_error)
             length = length_or_error
             try:
                 data = self.rfile.read(length)
             except TimeoutError:
-                self.close_connection = True
                 return self._send(408, 'request body timed out\n')
             if len(data) != length:
-                self.close_connection = True
                 return self._send(400, 'incomplete body\n')
             status, body = witness.add_checkpoint(data)
             self._send(status, body, 'text/x.tlog.size' if status == 409 else 'text/plain; charset=utf-8')

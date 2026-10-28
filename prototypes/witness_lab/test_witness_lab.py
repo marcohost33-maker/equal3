@@ -401,10 +401,10 @@ class HttpFraming(unittest.TestCase):
         self.server.server_close()
         self.thread.join(timeout=10)
 
-    def exchange(self, head, body=b'', half_close=True):
+    def exchange(self, head, body=b'', half_close=True, path=b'/add-checkpoint'):
         import socket
         with socket.create_connection(self.server.server_address, timeout=10) as s:
-            s.sendall(b'POST /add-checkpoint HTTP/1.1\r\nHost: lab\r\n' + head + b'\r\n' + body)
+            s.sendall(b'POST ' + path + b' HTTP/1.1\r\nHost: lab\r\n' + head + b'\r\n' + body)
             if half_close:
                 s.shutdown(socket.SHUT_WR)
             data = b''
@@ -454,6 +454,29 @@ class HttpFraming(unittest.TestCase):
     def test_truncated_body_never_reaches_the_witness(self):
         # the client announces 100 bytes, sends 10 and closes its side
         self.assert_rejected(b'Content-Length: 100\r\n', b'0123456789', 400)
+
+    def test_http11_error_without_reading_the_body_closes_the_connection(self):
+        # RFC 9112 section 9.3: read the whole body or close before reusing the connection. The server
+        # speaks HTTP/1.0 by default; this test enables HTTP/1.1 keep-alive to check the error paths.
+        self.server.RequestHandlerClass.protocol_version = 'HTTP/1.1'
+        smuggled = b'GET /x HTTP/1.1\r\nHost: lab\r\n\r\n'
+        for path, head in ((b'/wrong', b'Content-Length: %d\r\n' % len(smuggled)),
+                           (b'/add-checkpoint', b'Content-Length: +%d\r\n' % len(smuggled)),
+                           (b'/add-checkpoint', b'Transfer-Encoding: chunked\r\n')):
+            with self.subTest(path=path, head=head):
+                status, raw = self.exchange(head, smuggled, half_close=False, path=path)
+                self.assertIn(status, (400, 404, 501), raw)
+                self.assertEqual(raw.count(b'HTTP/1.1 '), 1, raw)
+                self.assertIn(b'\r\nConnection: close\r\n', raw)
+        self.assertEqual(self.witness.bodies, [])
+
+    def test_http11_keep_alive_still_serves_well_formed_requests(self):
+        self.server.RequestHandlerClass.protocol_version = 'HTTP/1.1'
+        one = b'POST /add-checkpoint HTTP/1.1\r\nHost: lab\r\nContent-Length: 5\r\n\r\nhello'
+        status, raw = self.exchange(b'Content-Length: 5\r\n', b'hello' + one)
+        self.assertEqual(status, 200, raw)
+        self.assertEqual(raw.count(b'HTTP/1.1 200 '), 2, raw)
+        self.assertEqual(self.witness.bodies, [b'hello', b'hello'])
 
     def test_stalled_body_times_out(self):
         # the client announces 100 bytes, sends 10 and keeps the connection open
