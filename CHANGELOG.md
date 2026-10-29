@@ -38,13 +38,14 @@ All research versions keep the release decision **NO-GO**. Version history of th
 
 - P0-3 mechanism: `prototypes/witness_lab/`, covering C2SP signed-note, tlog-checkpoint,
   tlog-cosignature (Ed25519, timestamped) and the tlog-witness `add-checkpoint` protocol with atomic
-  state, misbehaviour evidence and an HTTP front end. 29 tests:
+  state, misbehaviour evidence and an HTTP front end. 32 tests:
   - spec known answer (vkey `530d903a`);
   - all status codes and a concurrency race;
   - NR-01 joint-rollback lab, witness rollback with quorum, fork evidence;
   - a separate-process HTTP witness;
-  - HTTP request framing (RFC 9112 section 6) and connection reuse (section 9.3).
-  Seventeen mutants were killed by hand. The HTTP test found a vkey parsing bug, fixed with a
+  - HTTP request framing (RFC 9112 section 6) and connection reuse (sections 9.3 and 9.6).
+  Seventeen mutants were killed by hand, five more for the R12 connection close by
+  `diskriminierung.py` (one further mutant is equivalent on CPython 3.14). The HTTP test found a vkey parsing bug, fixed with a
   regression test. Runs in the non-root CI job.
 
 ### Fixed
@@ -60,8 +61,15 @@ All research versions keep the release decision **NO-GO**. Version history of th
   server speaks HTTP/1.0). With HTTP/1.1 keep-alive enabled, a 404 for a wrong path left the request
   body unread and the server parsed it as a second request (two responses). Every error response
   (>= 400) now sends `Connection: close` and closes the connection (RFC 9112 section 9.3). Two tests:
-  red on `a7c6e50` (3 failing cases), green after the fix; keep-alive still serves well-formed
-  requests; one mutant killed.
+  red on `a7c6e50` (3 failing cases), green after the fix; one mutant killed.
+- `http_witness.py` connection reuse after a 200, reported by the cross-family review R12. On
+  `8c22517` HTTP/1.1 still served a pipelined request after POST 200 and GET 200 (it reached the
+  witness), and HTTP/1.0 sent no `Connection: close` with a 200. Every response now sets
+  `close_connection` and sends `Connection: close` (RFC 9112 sections 9.3 and 9.6), so the lab
+  serves one request per connection. New test over 16 request paths under HTTP/1.0 and HTTP/1.1
+  with a pipelined canary: red on `8c22517` (8 failing cases), green after the fix. The earlier
+  check that keep-alive still answers two pipelined well-formed requests contradicts this and is
+  inverted. So far run on Windows only; the CI run is open.
 
 - P0-2 analysis: `docs/ADR-003` (proposed). Measured import graph: every service path imports
   `state_store` (legacy API), and there is an import cycle among the anchor modules. No production

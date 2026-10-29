@@ -14,12 +14,13 @@ From the C2SP editor's copies (github.com/C2SP/C2SP @ `fea9004`, fetched 2026-10
 |---|---|---|
 | `note.py` | signed-note, tlog-checkpoint, tlog-cosignature | strict note parsing (UTF-8, no control characters, canonical base64, key-name rules); key IDs; vkeys; Ed25519 log signatures (type 0x01); timestamped Ed25519 checkpoint cosignatures (type 0x04, `cosignature/v1` + `time <t>` + checkpoint text) |
 | `witness.py` | tlog-witness `add-checkpoint` | 400 / 403 / 404 / 409 (`text/x.tlog.size` body) / 422 / 200; old-size check and persistence in one `BEGIN IMMEDIATE` transaction; rejected but validly signed requests kept as misbehaviour evidence |
-| `http_witness.py` | tlog-witness HTTP, RFC 9112 §6 framing | `POST /add-checkpoint`, `GET /<sha256(origin)>/checkpoint`; stdlib, 127.0.0.1 only; one Content-Length of ASCII digits, no Transfer-Encoding, size limit, complete body before the witness sees it, socket timeout; every error response closes the connection |
+| `http_witness.py` | tlog-witness HTTP, RFC 9112 §6 framing | `POST /add-checkpoint`, `GET /<sha256(origin)>/checkpoint`; stdlib, 127.0.0.1 only; one Content-Length of ASCII digits, no Transfer-Encoding, size limit, complete body before the witness sees it, socket timeout; one request per connection: every response sends `Connection: close` and closes |
 | `lab_log.py` | — | log operator on the RFC 9162 tree of `../merkle_audit_log`; client policy: log signature **and** a quorum of witness cosignatures **and** consistency with the largest checkpoint accepted before |
 
 ## Results
 
-`test_witness_lab.py`, 29 tests, run as root and non-root:
+`test_witness_lab.py`, 32 tests. The first 29 were run as root and non-root on Linux; the three
+connection tests of review R12 so far only on Windows (Python 3.14.4), the CI run is still open:
 
 | Scenario | Outcome |
 |---|---|
@@ -34,7 +35,9 @@ From the C2SP editor's copies (github.com/C2SP/C2SP @ `fea9004`, fetched 2026-10
 | client that already accepted size 20 | rejects a forked 25 and an older 10 (`RollbackDetected`) |
 | witness as a separate process over HTTP | 200, 409 with `text/x.tlog.size`, monitoring GET returns log signature and witness cosignature |
 | HTTP framing: Content-Length `abc`, `+5`, `5_0`, `-5`, `0x5`, full-width digit; duplicate or list value; Transfer-Encoding with / without Content-Length; missing; 0; > 64 KiB or 5000 digits; truncated body; stalled body | 400; 400; 400 / 501; 411; 400; 413; 400; 408. No rejected request reaches the witness. |
-| HTTP/1.1 keep-alive enabled: error response before the body is read (wrong path, bad Content-Length, Transfer-Encoding) | exactly one response with `Connection: close`; well-formed pipelined requests still both answered |
+| HTTP/1.1 keep-alive enabled: error response before the body is read (wrong path, bad Content-Length, Transfer-Encoding) | exactly one response with `Connection: close` |
+| HTTP/1.0 and HTTP/1.1, 16 request paths (POST 200 / 409 / 404 / 400 / 411 / 413 / 501 / 431, GET 200 / 404 with and without body, HEAD and PUT 501, client `Connection: keep-alive`), each followed by a pipelined canary POST; real witness | exactly one response, status line in the configured version, `Connection: close`, one Content-Length equal to the body bytes; the server closes before its idle timeout; the canary never reaches the witness. Positive control: the canary alone is served. Two pipelined well-formed POSTs get one answer |
+| unparsable request line (`GARBAGE`, `HTTP/9.9`, `HTTP/x`) followed by the canary | CPython answers HTTP/0.9 style (no status line, no headers); the connection still ends and the canary never reaches the witness |
 
 **Mutation checks**, each run by hand against a copy of the code. All 17 mutants are killed:
 - vkey split on every `+`;
@@ -50,6 +53,16 @@ From the C2SP editor's copies (github.com/C2SP/C2SP @ `fea9004`, fetched 2026-10
   allowed, size limit unchecked, no socket timeout;
 - error response without `Connection: close`.
 
+**Connection close (review R12)**, run with `Vero/Tools/diskriminierung.py` against `fbd60d8`
+(run `DK-20261029T174506-ecb6d06547e0`): five mutants killed by
+`HttpConnectionClose.test_every_response_closes_the_connection`, the first also by the inverted
+pipelining test — close only for status >= 400 (the `8c22517` state), header removed, header
+`keep-alive`, header `close` but `close_connection = False` after the write, Content-Length in
+characters instead of bytes. One mutant survives on CPython 3.14.4 and is equivalent there
+(run `DK-20261029T174826-ef0998499f81`): removing the explicit `close_connection = True`, because
+`send_header('Connection', 'close')` also sets it (the same code is in 3.13.13, read, not run). That behaviour is not in the `http.server`
+documentation, so the explicit assignment stays.
+
 The HTTP test found a real bug before release: the base64 part of a vkey can contain `+`, so the
 vkey must be split at the first two `+` only.
 
@@ -60,6 +73,9 @@ unchanged server (8 of 9 tests, 14 failing cases); the fix is an independent imp
 the reviewer's patch file. The follow-up reviews R5/R9/R10 found a latent HTTP/1.1 case: an error
 answered before the body was read left the body to be parsed as a second request (404, then another
 response). Every error response now closes the connection (RFC 9112 section 9.3); red first again.
+Review R12 asked for the same on every response: on `8c22517` HTTP/1.1 still served a pipelined
+request after a 200 (POST and GET), and HTTP/1.0 sent no `Connection: close` with a 200. Now every
+response closes (RFC 9112 sections 9.3 and 9.6); the new test was red first (8 failing cases).
 
 ## What this does not show
 
