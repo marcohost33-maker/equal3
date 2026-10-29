@@ -6,8 +6,10 @@ GET  /<sha256(origin) hex>/checkpoint   latest cosigned checkpoint with the stor
 
 Request framing follows RFC 9112 section 6 strictly: one Content-Length of ASCII digits, no
 Transfer-Encoding, at most MAX_BODY bytes, the whole body read before the witness sees it, and a
-socket timeout (408 if the body stalls). Every error response (>= 400) sends
-"Connection: close" and closes the connection, so unread body bytes are never parsed as a request.
+socket timeout (408 if the body stalls). Every response sends "Connection: close" and closes the
+connection, also 200 and also with protocol_version HTTP/1.1, so unread body bytes are never parsed
+as a request and no connection is reused (RFC 9112 sections 9.3 and 9.6). Errors raised by
+BaseHTTPRequestHandler itself (send_error) close as well.
 
 Lab use only: binds to 127.0.0.1, no TLS, no rate limits. Run:
   python http_witness.py --db DIR/witness.sqlite --port 0 --witness-key-file KEY \
@@ -64,12 +66,15 @@ def body_length(headers):
 def make_handler(witness: Witness, timeout: float = 5.0):
     class Handler(BaseHTTPRequestHandler):
         def _send(self, status: int, body: str, content_type: str = 'text/plain; charset=utf-8'):
+            # One request per connection, whatever the status and protocol_version: an early answer
+            # can leave request body bytes unread, and those must never be parsed as a next request
+            # (RFC 9112 section 9.3). A server without persistent connections sends "close" in every
+            # non-1xx response (section 9.6). close_connection is the documented switch that ends
+            # handle(); the header only tells the client.
+            self.close_connection = True
             data = body.encode('utf-8')
             self.send_response(status)
-            if status >= 400:
-                # an error may leave request body bytes unread; never reuse the connection
-                # (RFC 9112 section 9.3). send_header sets close_connection for this header.
-                self.send_header('Connection', 'close')
+            self.send_header('Connection', 'close')
             self.send_header('Content-Type', content_type)
             self.send_header('Content-Length', str(len(data)))
             self.end_headers()

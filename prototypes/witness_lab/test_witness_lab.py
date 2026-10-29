@@ -470,13 +470,16 @@ class HttpFraming(unittest.TestCase):
                 self.assertIn(b'\r\nConnection: close\r\n', raw)
         self.assertEqual(self.witness.bodies, [])
 
-    def test_http11_keep_alive_still_serves_well_formed_requests(self):
+    def test_http11_pipelined_well_formed_requests_get_one_answer(self):
+        # review R12: the lab serves one request per connection, also after a 200 (8c22517 still answered
+        # both; that keep-alive was a positive control then and is excluded by the invariant now)
         self.server.RequestHandlerClass.protocol_version = 'HTTP/1.1'
         one = b'POST /add-checkpoint HTTP/1.1\r\nHost: lab\r\nContent-Length: 5\r\n\r\nhello'
         status, raw = self.exchange(b'Content-Length: 5\r\n', b'hello' + one)
         self.assertEqual(status, 200, raw)
-        self.assertEqual(raw.count(b'HTTP/1.1 200 '), 2, raw)
-        self.assertEqual(self.witness.bodies, [b'hello', b'hello'])
+        self.assertEqual(raw.count(b'HTTP/1.1 '), 1, raw)
+        self.assertIn(b'\r\nConnection: close\r\n', raw)
+        self.assertEqual(self.witness.bodies, [b'hello'])
 
     def test_stalled_body_times_out(self):
         # the client announces 100 bytes, sends 10 and keeps the connection open
