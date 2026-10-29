@@ -23,6 +23,47 @@ research record; that decision does not change the NO-GO status and does not cre
 | P0-6 | KMS/HSM, data-protection inventory / Swiss FADP (CH-DSG), complete encryption at rest including backups, log privacy, VFS/power-loss lab. |
 | P1 | Runtime cost of the O(n) historical audit; authenticated checkpoints with adversarial proof tests; P50/P95/P99 at 10k/100k history. |
 
+### Status notes after the import (not part of the v0.7.22 roadmap)
+
+- **P0-1, 2026-10-27, partly addressed.** The negative-first request-binding test runs in CI on every
+  push/PR (it did since the import); `anchor_wire` now runs there too, and a root job runs the
+  separate-UID tests. The 430-test regression from a byte-identical reconstruction of the bundle
+  passed on Linux ([verification/2026-10-27_linux](../verification/2026-10-27_linux/README.md)).
+  Still open: why `anchor_wire` hung in the audit environment, and a run by someone outside
+  this channel ("independent CI" in the sense of the audits).
+- **P0-4, 2026-10-27, partly addressed.** CI builds SQLite 3.54.1 from the official amalgamation with
+  the unmodified research builder (SHA3 pins, also listed by sqlite.org). It shows that the test
+  processes map exactly that library, and runs the full regression on it: 430/430 as root, 0 skips.
+  The WAL-reset gate opens without override there and holds on the unpatched system SQLite
+  ([verification/2026-10-27_sqlite-3.54.1](../verification/2026-10-27_sqlite-3.54.1/README.md)).
+  Still open: signed/independently reproduced build evidence and a real deployment.
+- **P1, 2026-10-27, measured and designed, not implemented.**
+  - P50/P95/P99 at 1k/10k/100k: an anchor operation takes about 0.9 s at the 100k-row cap, after
+    which the anchor HOLDs; an authenticated read takes about 1.7 s at 100k commits
+    ([verification/2026-10-27_history-scaling](../verification/2026-10-27_history-scaling/README.md)).
+  - Proposed fix: RFC 9162 checkpointed log ([ADR-002](ADR-002_checkpointed-audit-log.md)), with a
+    tested prototype in `prototypes/merkle_audit_log/`.
+  - Implementation needs its own research round.
+- **P0-3, 2026-10-27, mechanism prototyped, not operated.** `prototypes/witness_lab/` implements C2SP
+  signed checkpoints, Ed25519 checkpoint cosignatures and the tlog-witness `add-checkpoint` protocol
+  (atomic state, misbehaviour evidence). Its lab tests reproduce NR-01 (a joint local rollback is
+  cosigned by the restored local witness) and show the detection by external witnesses (409,
+  quorum, newer checkpoint visible). Still open:
+  - independently operated witnesses in another administrative domain;
+  - gossip between clients and monitors;
+  - timestamp/freshness policy;
+  - integration into the anchor (research round).
+- **P0-2, 2026-10-27, analysed, design proposed** ([ADR-003](ADR-003_production-surface-legacy-bypass.md)).
+  - No production start path exists: `serve()` HOLDs without the research flag.
+  - Every service module imports `state_store`, which is also the legacy direct-write API, so
+    excluding legacy modules by import is impossible in the current layout.
+  - The boundary today is the OS: separate UID, DB 0600 owned by the writer. The UID tests now run
+    as root in CI.
+  - Remaining bypass: code running as the writer UID can call `StateStore.apply()`.
+  - Proposed: split engine and legacy shim, writer capability, allowlist distribution with an
+    import-closure check, OS policy for the writer UID.
+- P0-5 and P0-6 are unchanged and open.
+
 ## Release gates (RELEASE_GATES_V0722.json)
 
 | Field | Value |
