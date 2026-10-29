@@ -485,5 +485,184 @@ class HttpFraming(unittest.TestCase):
         self.assertEqual(self.witness.bodies, [])
 
 
+class RecordingProxy:
+    """The real Witness behind the HTTP layer; records every body handed to add_checkpoint."""
+
+    def __init__(self, inner):
+        self._inner = inner
+        self.bodies = []
+
+    def add_checkpoint(self, body):
+        self.bodies.append(body)
+        return self._inner.add_checkpoint(body)
+
+    def __getattr__(self, name):  # trusted, latest, signer, clock
+        return getattr(self._inner, name)
+
+
+def parse_responses(raw, head_first=False):
+    """Split a byte stream into Content-Length framed responses; any leftover byte is an error."""
+    out, rest = [], raw
+    while rest:
+        end = rest.find(b'\r\n\r\n')
+        if end < 0:
+            raise AssertionError('incomplete response head: %r' % rest[:300])
+        status_line, *fields = rest[:end].split(b'\r\n')
+        headers = {}
+        for line in fields:
+            name, sep, value = line.partition(b':')
+            if not sep:
+                raise AssertionError('malformed header line %r' % line)
+            headers.setdefault(name.strip().lower(), []).append(value.strip(b' \t'))
+        lengths = headers.get(b'content-length', [])
+        if len(lengths) != 1 or not lengths[0].isdigit():
+            raise AssertionError('need exactly one numeric Content-Length: %r' % rest[:end])
+        # a HEAD response announces the GET length but carries no body (RFC 9110 section 9.3.2)
+        size = 0 if (head_first and not out) else int(lengths[0])
+        body = rest[end + 4:end + 4 + size]
+        if len(body) != size:
+            raise AssertionError('body shorter than Content-Length: %r' % rest[:300])
+        out.append((status_line, headers, body))
+        rest = rest[end + 4 + size:]
+    return out
+
+
+class HttpConnectionClose(TempDirTest):
+    """Invariant (reviews R10/R12): after one response the lab witness never serves another request on
+    the same connection, for every method and status path, under HTTP/1.0 (default) and HTTP/1.1.
+
+    Each response says "Connection: close" (RFC 9112 section 9.6: a server without persistent
+    connections MUST send it in every non-1xx response) and has a Content-Length matching its body.
+    Each case is followed by a pipelined canary POST; served, it would show up as a second response and
+    as a body at the witness. The server must also close by itself, before its idle timeout.
+    """
+    CANARY = b'POST /add-checkpoint HTTP/1.1\r\nHost: lab\r\nContent-Length: 6\r\n\r\ncanary'
+    IDLE = 3.0      # handler socket timeout: a server that keeps the connection waits this long
+    DEADLINE = 1.5  # client read timeout, shorter than IDLE: no EOF by then means no server close
+
+    def setUp(self):
+        super().setUp()
+        self.log = LabLog(ORIGIN)
+        self.log.append(*events(b'e', 0, 7))
+        self.cosigned = self.log.request_for(0)
+        self.log.append(*events(b'e', 7, 12))
+        self.n = 0
+
+    def serve(self, protocol):
+        import http_witness
+        self.n += 1
+        inner = self.witness('w%d.example/w' % self.n, self.log)
+        self.assertEqual(inner.add_checkpoint(self.cosigned)[0], 200)  # witness state: size 7
+        proxy = RecordingProxy(inner)
+        handler = http_witness.make_handler(proxy, timeout=self.IDLE)
+        handler.protocol_version = protocol
+        server = http_witness.ThreadingHTTPServer(('127.0.0.1', 0), handler)
+        thread = threading.Thread(target=server.serve_forever, kwargs={'poll_interval': 0.05}, daemon=True)
+        thread.start()
+
+        def stop():
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=10)
+        self.addCleanup(stop)
+        return server, proxy
+
+    def talk(self, server, payload):
+        """Send payload in one write, read until the server closes; None if it did not close in time."""
+        import socket
+        with socket.create_connection(server.server_address, timeout=10) as s:
+            s.sendall(payload)
+            s.settimeout(self.DEADLINE)
+            data = b''
+            try:
+                while True:
+                    chunk = s.recv(65536)
+                    if not chunk:
+                        return data
+                    data += chunk
+            except TimeoutError:
+                return None
+
+    def cases(self):
+        post = b'POST /add-checkpoint HTTP/1.1\r\nHost: lab\r\n'
+        unread = b'X'  # one body byte the handler never reads on this path
+        origin_hash = hashlib.sha256(ORIGIN.encode()).hexdigest().encode()
+        stranger = LabLog('stranger.example/log')
+        stranger.append(b'x')
+        good = self.log.request_for(7)
+        stale = self.log.request_for(3)
+        alien = stranger.request_for(0)
+
+        def with_body(head, body):
+            return head + b'Content-Length: %d\r\n\r\n' % len(body) + body
+        return (
+            ('POST 200', with_body(post, good), 200, False),
+            ('POST 200, client asks keep-alive', with_body(post + b'Connection: keep-alive\r\n', good), 200,
+             False),
+            ('POST 200, HTTP/1.0 client asks keep-alive',
+             with_body(b'POST /add-checkpoint HTTP/1.0\r\nConnection: keep-alive\r\n', good), 200, False),
+            ('POST 409 stale old size', with_body(post, stale), 409, False),
+            ('POST 404 unknown log', with_body(post, alien), 404, False),
+            ('POST 404 wrong path, body unread', with_body(b'POST /wrong HTTP/1.1\r\nHost: lab\r\n', unread),
+             404, False),
+            ('POST 400 bad Content-Length, body unread', post + b'Content-Length: +1\r\n\r\n' + unread, 400,
+             False),
+            ('POST 411 no Content-Length', post + b'\r\n', 411, False),
+            ('POST 413 announced too large', post + b'Content-Length: 99999999\r\n\r\n' + unread, 413, False),
+            ('POST 501 Transfer-Encoding', post + b'Transfer-Encoding: chunked\r\n\r\n1\r\nX\r\n0\r\n\r\n', 501,
+             False),
+            ('GET 200 checkpoint', b'GET /' + origin_hash + b'/checkpoint HTTP/1.1\r\nHost: lab\r\n\r\n', 200,
+             False),
+            ('GET 404 never cosigned', b'GET /' + b'0' * 64 + b'/checkpoint HTTP/1.1\r\nHost: lab\r\n\r\n', 404,
+             False),
+            ('GET 404 wrong path, body unread', with_body(b'GET /wrong HTTP/1.1\r\nHost: lab\r\n', unread), 404,
+             False),
+            ('HEAD 501 (stdlib send_error)', b'HEAD / HTTP/1.1\r\nHost: lab\r\n\r\n', 501, True),
+            ('PUT 501 (stdlib send_error), body unread', with_body(b'PUT /add-checkpoint HTTP/1.1\r\nHost: lab\r\n',
+                                                                     unread), 501, False),
+            ('POST 431 too many header fields (stdlib send_error)', post + b'X-H: 1\r\n' * 101 + b'\r\n', 431,
+             False),
+        )
+
+    def test_positive_control_the_canary_is_served_on_its_own(self):
+        # without this the canary could be dropped for an unrelated reason and the checks below be blind
+        for protocol in ('HTTP/1.0', 'HTTP/1.1'):
+            with self.subTest(protocol=protocol):
+                server, proxy = self.serve(protocol)
+                raw = self.talk(server, self.CANARY)
+                self.assertIsNotNone(raw, 'server did not close')
+                responses = parse_responses(raw)
+                self.assertEqual(len(responses), 1, raw)
+                self.assertEqual(proxy.bodies, [b'canary'])
+
+    def test_every_response_closes_the_connection(self):
+        for protocol in ('HTTP/1.0', 'HTTP/1.1'):
+            for name, request, status, head_first in self.cases():
+                with self.subTest(protocol=protocol, case=name):
+                    server, proxy = self.serve(protocol)
+                    raw = self.talk(server, request + self.CANARY)
+                    self.assertIsNotNone(raw, 'server kept the connection open after its response')
+                    responses = parse_responses(raw, head_first)
+                    self.assertEqual(len(responses), 1, raw)
+                    status_line, headers, _ = responses[0]
+                    version, code = status_line.split(b' ')[:2]
+                    self.assertEqual(version, protocol.encode(), raw)
+                    self.assertEqual(int(code), status, raw)
+                    self.assertEqual(headers.get(b'connection'), [b'close'], raw)
+                    self.assertNotIn(b'canary', proxy.bodies, 'the pipelined request reached the witness')
+
+    def test_malformed_request_line_is_answered_once_and_closed(self):
+        # CPython answers an unparsable request line HTTP/0.9 style (no status line, no headers), so the
+        # header checks above do not apply; the connection must still end without serving the canary.
+        for protocol in ('HTTP/1.0', 'HTTP/1.1'):
+            for line in (b'GARBAGE\r\n', b'GET / HTTP/9.9\r\n', b'GET / HTTP/x\r\n'):
+                with self.subTest(protocol=protocol, line=line):
+                    server, proxy = self.serve(protocol)
+                    raw = self.talk(server, line + b'\r\n' + self.CANARY)
+                    self.assertIsNotNone(raw, 'server kept the connection open')
+                    self.assertLessEqual(raw.count(b'HTTP/1.'), 1, raw)
+                    self.assertEqual(proxy.bodies, [])
+
+
 if __name__ == '__main__':
     unittest.main()
