@@ -19,8 +19,8 @@ From the C2SP editor's copies (github.com/C2SP/C2SP @ `fea9004`, fetched 2026-10
 
 ## Results
 
-`test_witness_lab.py`, 32 tests. The first 29 were run as root and non-root on Linux; the three
-connection tests of review R12 so far only on Windows (Python 3.14.4), the CI run is still open:
+`test_witness_lab.py`, 33 tests, run as root and non-root on Linux (locally and in CI run
+40931419436 for the R12 tests) and on Windows (Python 3.14.4):
 
 | Scenario | Outcome |
 |---|---|
@@ -28,6 +28,7 @@ connection tests of review R12 so far only on Windows (Python 3.14.4), the CI ru
 | first checkpoint, growth with consistency proof, same-size re-cosign | 200 |
 | stale old size / old > size / unknown origin / untrusted key / bad proof / > 63 proof lines | 409 `8\n` / 400 / 404 / 403 / 422 / 400; state unchanged |
 | same size with another root; non-empty proof at old size 0 | 422 |
+| same-size resubmission with extra signature lines, one forged under the witness's own key ID (Codex review) | 200; only the verified log signature is stored and served, so the monitoring note still verifies |
 | two concurrent requests from the same old size (10 rounds) | always exactly one 200 and one 409; stored size = winner |
 | **joint rollback of log, local witness DB and client state** to size 10 after the external witnesses saw 20, then a fork to 15 | local witness **cosigns the fork** (NR-01 reproduced); external witnesses answer **409** (`20`); a client that requires 2 external cosignatures cannot accept the fork; the external witness still holds 20 > 10, so the rollback is visible |
 | fork extended past the witnessed size (old 20, proof from the fork) | 422, kept as evidence with a valid log signature over a conflicting root |

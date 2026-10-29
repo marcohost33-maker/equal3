@@ -72,9 +72,15 @@ class Witness:
         if not keys:
             return 404, 'unknown origin\n'
         try:
-            n.verify_note(note, [k for k in keys if k.sig_type == n.TYPE_ED25519])
+            verified = n.verify_note(note, [k for k in keys if k.sig_type == n.TYPE_ED25519])
         except n.NoteError as exc:
             return 403, '%s\n' % exc
+        # store and later serve only the log signatures verified here: a request may carry extra
+        # lines, e.g. a forged one under this witness's own key ID, that would break the served note
+        kept = {(v.name, v.key_id) for v in verified}
+        note_bytes = note.text + b'\n' + ''.join(
+            '%s %s %s\n' % (n.EM_DASH, sig.name, n.b64encode(sig.key_id + sig.payload))
+            for sig in note.signatures if (sig.name, sig.key_id) in kept).encode('utf-8')
         if old > checkpoint.size:
             return 400, 'old size larger than checkpoint size\n'
         with closing(self._connect()) as db:

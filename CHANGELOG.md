@@ -38,7 +38,7 @@ All research versions keep the release decision **NO-GO**. Version history of th
 
 - P0-3 mechanism: `prototypes/witness_lab/`, covering C2SP signed-note, tlog-checkpoint,
   tlog-cosignature (Ed25519, timestamped) and the tlog-witness `add-checkpoint` protocol with atomic
-  state, misbehaviour evidence and an HTTP front end. 32 tests:
+  state, misbehaviour evidence and an HTTP front end. 33 tests:
   - spec known answer (vkey `530d903a`);
   - all status codes and a concurrency race;
   - NR-01 joint-rollback lab, witness rollback with quorum, fork evidence;
@@ -69,7 +69,12 @@ All research versions keep the release decision **NO-GO**. Version history of th
   serves one request per connection. New test over 16 request paths under HTTP/1.0 and HTTP/1.1
   with a pipelined canary: red on `8c22517` (8 failing cases), green after the fix. The earlier
   check that keep-alive still answers two pipelined well-formed requests contradicts this and is
-  inverted. So far run on Windows only; the CI run is open.
+  inverted. Green on Windows, on Linux as root and non-root, and in CI run 40931419436.
+- `witness.py` stored note, reported by the Codex review of `5e1828d` (P2). A same-size
+  resubmission of the public checkpoint with an extra signature line forged under the witness's own
+  name and key ID was stored and served by the monitoring GET, so the served note no longer
+  verified. The witness now stores only the checkpoint text and the log signature lines it verified.
+  Test red on `5e1828d`, green after; the mutant without the filter is killed.
 
 - P0-2 analysis: `docs/ADR-003` (proposed). Measured import graph: every service path imports
   `state_store` (legacy API), and there is an import cycle among the anchor modules. No production

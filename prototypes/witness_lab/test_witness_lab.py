@@ -154,6 +154,24 @@ class WitnessProtocol(TempDirTest):
         self.assertEqual(self.w.latest(ORIGIN)[0], 13)
         self.assertEqual(self.add(13)[0], 200)  # same size, same root: cosigned again
 
+    def test_stored_note_keeps_only_verified_log_signatures(self):
+        # Codex review on 5e1828d: a same-size resubmission of the public checkpoint with an extra,
+        # forged signature line under the witness's own name and key ID was stored and later served,
+        # so the monitoring note no longer verified. Only verified log signatures may be stored.
+        self.log.append(*events(b'e', 0, 6))
+        self.assertEqual(self.add(0)[0], 200)
+        wv = self.w.signer.verifier
+        forged = '— %s %s\n' % (wv.name, n.b64encode(wv.key_id + bytes(72)))
+        stranger = '— stranger.example/k %s\n' % n.b64encode(b'\x01\x02\x03\x04' + bytes(64))
+        note = self.log.signed_checkpoint() + (forged + stranger).encode()
+        status, body = self.add(6, build_request(6, [], note))
+        self.assertEqual(status, 200, body)
+        stored = self.w.latest(ORIGIN)[2]
+        self.assertEqual(stored, self.log.signed_checkpoint())
+        served = stored + self.w.signer.signature_line(n.parse_note(stored).text, 1_900_000_000).encode()
+        verified = n.verify_note(n.parse_note(served), [self.log.signer.verifier, wv])
+        self.assertEqual(set(verified), {self.log.signer.verifier, wv})
+
     def test_status_codes(self):
         self.log.append(*events(b'e', 0, 8))
         self.assertEqual(self.add(0)[0], 200)
