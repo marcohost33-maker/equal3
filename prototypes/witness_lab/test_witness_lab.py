@@ -19,6 +19,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import note as n  # noqa: E402
+import lab_log  # noqa: E402
 from lab_log import ClientState, LabLog, RollbackDetected, accept_checkpoint  # noqa: E402
 from witness import Witness, build_request  # noqa: E402
 
@@ -252,8 +253,8 @@ class WitnessProtocol(TempDirTest):
         self.assertNotEqual(n.parse_checkpoint_text(note.text).root, self.w.latest(ORIGIN)[1])
 
 
-class JointRollbackLab(TempDirTest):
-    """NR-01: store, anchor and local witness are restored together to an older valid state."""
+class RollbackLabBase(TempDirTest):
+    """One log, a local witness and two external witnesses (no tests here, shared fixture)."""
 
     def setUp(self):
         super().setUp()
@@ -274,6 +275,10 @@ class JointRollbackLab(TempDirTest):
             if status == 200:
                 lines += body
         return log.signed_checkpoint() + lines.encode(), statuses
+
+
+class JointRollbackLab(RollbackLabBase):
+    """NR-01: store, anchor and local witness are restored together to an older valid state."""
 
     def test_joint_rollback_is_invisible_locally_and_caught_externally(self):
         self.log.append(*events(b'e', 0, 10))
@@ -347,6 +352,119 @@ class JointRollbackLab(TempDirTest):
         older.append(*events(b'e', 0, 10))
         with self.assertRaises(RollbackDetected):
             accept_checkpoint(client, older.signed_checkpoint(), older.signer.verifier, [], 0, [])
+
+
+class CosignatureFreshness(RollbackLabBase):
+    """A cosignature says what the witness saw at its timestamp, not what it sees now.
+
+    C2SP tlog-cosignature only lets verifiers reject timestamps in the future; how old a
+    cosignature may be is client policy. Without that policy a client whose own state was
+    rolled back accepts a replayed old checkpoint: every signature on it is genuine.
+    """
+    T0 = 1_800_000_000
+    MAX_AGE = 300
+
+    def setUp(self):
+        super().setUp()
+        for w in (self.w1, self.w2):
+            w.clock.t = self.T0  # the next cosignature carries T0 + 1
+
+    def fresh(self, now, max_age=MAX_AGE, max_future=0):
+        return lab_log.Freshness(now=now, max_age=max_age, max_future=max_future)
+
+    def accept(self, signed, quorum=2, state=None, proof=(), **kw):
+        return accept_checkpoint(state or ClientState(), signed, self.log.signer.verifier, self.externals,
+                                 quorum, list(proof), **kw)
+
+    def test_replayed_old_checkpoint_is_rejected_by_a_rolled_back_client(self):
+        self.log.append(*events(b'e', 0, 10))
+        old_signed, st = self.publish(self.log, 0, [self.w1, self.w2])  # cosigned at T0 + 1
+        self.assertEqual(st, [200, 200])
+        snapshot = self.log.snapshot()
+        self.log.append(*events(b'e', 10, 20))
+        self.publish(self.log, 10, [self.w1, self.w2])                  # cosigned at T0 + 2
+        later = self.T0 + 3600
+
+        # the gap: a client restored to an empty state takes the old note, all signatures verify
+        self.assertEqual(self.accept(old_signed).size, 10)
+        # with a freshness bound the same note is refused
+        with self.assertRaises(lab_log.StaleCosignatures):
+            self.accept(old_signed, freshness=self.fresh(later))
+        # the attacker cannot get new cosignatures for the old checkpoint: the witnesses moved on
+        for w in (self.w1, self.w2):
+            w.clock.t = later - 1
+            status, body = w.add_checkpoint(snapshot.request_for(10))
+            self.assertEqual((status, body), (409, '20\n'))
+        # the honest log re-submits its current checkpoint (same size) and gets fresh cosignatures
+        current, st = self.publish(self.log, 20, [self.w1, self.w2])
+        self.assertEqual(st, [200, 200])
+        self.assertEqual(self.accept(current, freshness=self.fresh(later)).size, 20)
+
+    def test_age_and_future_bounds_are_inclusive(self):
+        self.log.append(*events(b'e', 0, 10))
+        signed, _ = self.publish(self.log, 0, [self.w1, self.w2])
+        t = self.T0 + 1  # timestamp of both cosignatures
+        self.assertEqual(self.accept(signed, freshness=self.fresh(t)).size, 10)
+        self.assertEqual(self.accept(signed, freshness=self.fresh(t + self.MAX_AGE)).size, 10)
+        with self.assertRaises(lab_log.StaleCosignatures):
+            self.accept(signed, freshness=self.fresh(t + self.MAX_AGE + 1))
+        # a cosignature from the future is not counted either (the spec allows rejecting it)
+        with self.assertRaises(lab_log.StaleCosignatures):
+            self.accept(signed, freshness=self.fresh(t - 1))
+        self.assertEqual(self.accept(signed, freshness=self.fresh(t - 5, max_future=5)).size, 10)
+        with self.assertRaises(lab_log.StaleCosignatures):
+            self.accept(signed, freshness=self.fresh(t - 6, max_future=5))
+        # max_age 0 accepts only a cosignature of this very second
+        self.assertEqual(self.accept(signed, freshness=self.fresh(t, max_age=0)).size, 10)
+        with self.assertRaises(lab_log.StaleCosignatures):
+            self.accept(signed, freshness=self.fresh(t + 1, max_age=0))
+
+    def test_only_fresh_cosignatures_count_towards_the_quorum(self):
+        self.log.append(*events(b'e', 0, 10))
+        self.w2.clock.t = self.T0 + 1000  # w1 cosigns at T0 + 1, w2 at T0 + 1001
+        signed, _ = self.publish(self.log, 0, [self.w1, self.w2])
+        now = self.T0 + 1001
+        with self.assertRaises(lab_log.StaleCosignatures) as caught:
+            self.accept(signed, quorum=2, freshness=self.fresh(now))
+        self.assertIn('1 of 2', str(caught.exception))
+        self.assertIn('ext1.example/w', str(caught.exception))  # names the stale witness
+        self.assertEqual(self.accept(signed, quorum=1, freshness=self.fresh(now)).size, 10)
+        # a stale cosignature is still a valid signature: without the policy both count
+        self.assertEqual(self.accept(signed, quorum=2).size, 10)
+
+    def test_missing_cosignatures_are_not_reported_as_stale(self):
+        self.log.append(*events(b'e', 0, 10))
+        signed, _ = self.publish(self.log, 0, [self.w1])
+        with self.assertRaises(n.NoteError) as caught:
+            self.accept(signed, quorum=2, freshness=self.fresh(self.T0 + 1))
+        self.assertNotIsInstance(caught.exception, lab_log.StaleCosignatures)
+
+    def test_freshness_does_not_replace_the_other_checks(self):
+        self.log.append(*events(b'e', 0, 20))
+        signed, _ = self.publish(self.log, 0, [self.w1, self.w2])
+        fresh = self.fresh(self.T0 + 1)
+        client = self.accept(signed, freshness=fresh)
+        older = LabLog(ORIGIN, self.log.signer)
+        older.append(*events(b'e', 0, 10))
+        with self.assertRaises(RollbackDetected):  # quorum 0: freshness has nothing to bound
+            accept_checkpoint(client, older.signed_checkpoint(), older.signer.verifier, [], 0, [],
+                              freshness=fresh)
+        fork = LabLog(ORIGIN, self.log.signer)
+        fork.append(*events(b'e', 0, 10), *events(b'FORK', 10, 25))
+        with self.assertRaises(RollbackDetected):
+            accept_checkpoint(client, fork.signed_checkpoint(), fork.signer.verifier, [], 0,
+                              fork.tree.consistency_proof(20), freshness=fresh)
+        tampered = signed.replace(b'\n20\n', b'\n21\n', 1)
+        with self.assertRaises(n.NoteError):
+            self.accept(tampered, freshness=fresh)
+
+    def test_freshness_policy_values_are_validated(self):
+        for kw in (dict(now=0, max_age=1), dict(now=-1, max_age=1), dict(now=10, max_age=-1),
+                   dict(now=10, max_age=1, max_future=-1), dict(now=1.5, max_age=1),
+                   dict(now=10, max_age=True), dict(now=n.MAX_U63 + 1, max_age=1)):
+            with self.subTest(kw=kw), self.assertRaises(ValueError):
+                lab_log.Freshness(**kw)
+        self.assertEqual(lab_log.Freshness(now=10, max_age=3).max_future, 0)
 
 
 class HttpWitnessProcess(TempDirTest):

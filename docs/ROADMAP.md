@@ -51,8 +51,15 @@ research record; that decision does not change the NO-GO status and does not cre
   quorum, newer checkpoint visible). Still open:
   - independently operated witnesses in another administrative domain;
   - gossip between clients and monitors;
-  - timestamp/freshness policy;
   - integration into the anchor (research round).
+
+  2026-11-18, client freshness policy added to the lab: only cosignatures inside
+  `[now - max_age, now + max_future]` count towards the quorum. A replayed old checkpoint with
+  genuine signatures is then refused by a client whose state was rolled back, and the witnesses
+  answer 409 when asked to cosign the old size again. Limits: the bound depends on the client's own
+  clock (no trusted time, same as the threat model), and the witnesses are still not operated
+  independently. C2SP now recommends ML-DSA-44 cosignatures for new deployments; the lab implements
+  the Ed25519 format only.
 - **P0-2, 2026-10-27, analysed, design proposed** ([ADR-003](ADR-003_production-surface-legacy-bypass.md)).
   - No production start path exists: `serve()` HOLDs without the research flag.
   - Every service module imports `state_store`, which is also the legacy direct-write API, so
@@ -60,6 +67,11 @@ research record; that decision does not change the NO-GO status and does not cre
   - The boundary today is the OS: separate UID, DB 0600 owned by the writer. The UID tests now run
     as root in CI.
   - Remaining bypass: code running as the writer UID can call `StateStore.apply()`.
+  - 2026-11-18: the first ADR-003 acceptance test exists as a tool, `tools/check_import_closure.py`
+    ([verification/2026-11-18_import-closure](../verification/2026-11-18_import-closure/README.md)).
+    It is red today, as the ADR requires, and CI pins that red state. It also showed that the
+    import cycle has six modules and includes the writer service (ADR-003 corrected). The gate
+    `legacy_bypass_elimination` stays open: nothing in the research code changed.
   - Proposed: split engine and legacy shim, writer capability, allowlist distribution with an
     import-closure check, OS policy for the writer UID.
 - P0-5 and P0-6 are unchanged and open.

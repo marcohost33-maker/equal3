@@ -43,6 +43,15 @@ jobs:
         run: python -m unittest -v tools/test_run_test_groups.py
       - name: Test the SQLite runtime check
         run: python -m unittest -v tools/test_check_sqlite_runtime.py
+      - name: Test the import-closure check (ADR-003)
+        run: python -m unittest -v tools/test_check_import_closure.py
+      # Known red: the writer entry point reaches the legacy write API and an import cycle.
+      # The step passes only while the violation set equals the recorded baseline, so a new
+      # legacy edge fails, and so does an unrecorded improvement. This closes no release gate.
+      - name: Import closure of the writer entry point equals the recorded red baseline (P0-2)
+        run: >
+          python tools/check_import_closure.py
+          --expect-baseline verification/2026-11-18_import-closure/baseline.json
       - name: Test the RFC 9162 log prototype (ADR-002)
         run: python -m unittest -v prototypes/merkle_audit_log/test_merkle_log.py
 

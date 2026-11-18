@@ -48,6 +48,24 @@ All research versions keep the release decision **NO-GO**. Version history of th
   `diskriminierung.py` (one further mutant is equivalent on CPython 3.14). The HTTP test found a vkey parsing bug, fixed with a
   regression test. Runs in the non-root CI job.
 
+- P0-2, first ADR-003 acceptance test (2026-11-18): `tools/check_import_closure.py` (+ 23 tests).
+  Static (AST) import closure of the writer entry point `anchored_writer_v0715`; reports reachable
+  legacy modules, the legacy write API (`StateStore.create/apply/checkpoint/backup_verified`),
+  import cycles, and dynamic imports or file loaders it cannot resolve (fail closed). Red on the
+  v0.7.22 tree as ADR-003 requires (5 violations). CI compares against
+  `verification/2026-11-18_import-closure/baseline.json`: a new violation fails, and so does an
+  improvement that was not recorded. 22 hand-made mutants of the tool are killed by its tests.
+- P0-3, cosignature freshness in the witness lab (2026-11-18): `lab_log.Freshness` and the
+  `freshness` argument of `accept_checkpoint`. Only cosignatures with a timestamp inside
+  `[now - max_age, now + max_future]` (both inclusive) count towards the quorum; otherwise
+  `StaleCosignatures`. Six tests, written first and failing on `7d104ea` (the names did not exist;
+  the first assertion of the replay test documents that the unchanged client accepts the replayed
+  checkpoint). 15 mutants killed, one equivalent mutant recorded. The lab now has 39 tests.
+
+### Changed (2026-11-18)
+- `docs/ADR-003`: the import cycle has six modules, not four; it includes `writer_service_v0714`
+  and `runtime_gate_v0711`. Found by the new check, verified in the sources.
+
 ### Fixed
 - `prototypes/witness_lab/http_witness.py` request framing, reported by the cross-family review
   R3/R5 (P1). `int(Content-Length or 0)` accepted `+5` and `5_0`, raised an unhandled `ValueError`
