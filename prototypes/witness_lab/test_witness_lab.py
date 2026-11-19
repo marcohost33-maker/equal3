@@ -475,7 +475,11 @@ class CosignatureFreshness(RollbackLabBase):
         new = self.w1.signer.signature_line(text, self.T0 + 1000).encode()
         policy = self.fresh(self.T0 + 1000, max_age=100)
         for lines in (old + new, new + old):
-            self.assertEqual(self.accept(signed + lines, quorum=1, freshness=policy).size, 10)
+            try:
+                accepted = self.accept(signed + lines, quorum=1, freshness=policy)
+            except lab_log.StaleCosignatures as exc:
+                self.fail('fresh quorum rejected for order %r: %s' % (lines[:12], exc))
+            self.assertEqual(accepted.size, 10)
         # negative control: only old cosignatures, in either order, stay stale
         older = self.w1.signer.signature_line(text, self.T0 + 1).encode()
         for lines in (old + older, older + old):
