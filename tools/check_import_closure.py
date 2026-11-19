@@ -3,6 +3,9 @@
 
 Computes, from the source text only (AST, nothing is imported or executed), every
 first-party module that the entry modules can reach, and reports as violations:
+(Scope: a static lint heuristic over first-party source. It is not a sandbox and does not
+claim to decide the dynamic import closure, whose set of spellings is open; every rule below
+fails closed on a mention, and the list of what it does NOT see is part of the contract.)
 
   legacy-module        a module in the closure whose name matches a forbidden pattern
                        (legacy_state_store, store_cli, guarded_store, run_*, bench*, test_*)
@@ -34,7 +37,8 @@ first-party module that the entry modules can reach, and reports as violations:
                          a string literal (sole exception: inside a function, a loop variable
                          whose only binding is a `for` over a tuple or list of string literals)
                          or names one of the identifiers above; a match-class keyword pattern
-                         naming one of them;
+                         naming one of them, or getattr / attrgetter / methodcaller /
+                         __import__ / import_module;
                        - a relative import.
                        NOT detected, so a pass does not exclude them: exec / eval / compile of
                        source text; ctypes and other C extensions; library code that imports by a
@@ -276,8 +280,9 @@ def scan_module(name: str, path: Path) -> Tuple[Set[str], List[Violation]]:
             if problem:
                 flag(problem, node)
         elif isinstance(node, ast.MatchClass):
+            # a keyword class pattern reads an attribute by name, like getattr: the same names fail
             for attr in node.kwd_attrs:
-                if attr in MACHINERY_IDENTIFIERS:
+                if attr in MACHINERY_IDENTIFIERS or attr in GETATTR_NAMES or attr in DYNAMIC_IMPORT_NAMES:
                     flag('match pattern on attribute %s' % attr, node)
         elif isinstance(node, ast.ClassDef) and node.name in LEGACY_WRITE_API:
             for item in node.body:

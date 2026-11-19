@@ -465,6 +465,23 @@ class CosignatureFreshness(RollbackLabBase):
         # a stale cosignature is still a valid signature: without the policy both count
         self.assertEqual(self.accept(signed, quorum=2).size, 10)
 
+    def test_refreshed_cosignature_counts_in_any_order(self):
+        # Codex P2 on 2dc2dce: old + refreshed cosignature of one witness on an unchanged checkpoint;
+        # acceptance depended on the order of the two lines (only the last timestamp was kept)
+        self.log.append(*events(b'e', 0, 10))
+        signed = self.log.signed_checkpoint()
+        text = n.parse_note(signed).text
+        old = self.w1.signer.signature_line(text, self.T0).encode()
+        new = self.w1.signer.signature_line(text, self.T0 + 1000).encode()
+        policy = self.fresh(self.T0 + 1000, max_age=100)
+        for lines in (old + new, new + old):
+            self.assertEqual(self.accept(signed + lines, quorum=1, freshness=policy).size, 10)
+        # negative control: only old cosignatures, in either order, stay stale
+        older = self.w1.signer.signature_line(text, self.T0 + 1).encode()
+        for lines in (old + older, older + old):
+            with self.assertRaises(lab_log.StaleCosignatures):
+                self.accept(signed + lines, quorum=1, freshness=policy)
+
     def test_missing_cosignatures_are_not_reported_as_stale(self):
         self.log.append(*events(b'e', 0, 10))
         signed, _ = self.publish(self.log, 0, [self.w1])

@@ -103,17 +103,21 @@ def accept_checkpoint(state: ClientState, signed: bytes, log_key: n.Verifier, wi
     """
     note = n.parse_note(signed)
     checkpoint = n.parse_checkpoint_text(note.text)
-    verified = n.verify_note(note, [log_key, *witnesses])
-    if log_key not in verified:
+    verified = n.verify_note_signatures(note, [log_key, *witnesses])
+    if log_key not in {v for v, _ in verified}:
         raise n.NoteError('no valid log signature')
-    cosigned = {v.name: info['timestamp'] for v, info in verified.items()
-                if v.sig_type == n.TYPE_COSIGNATURE_V1}
-    if len(cosigned) < quorum:
-        raise n.NoteError('%d of %d required witness cosignatures' % (len(cosigned), quorum))
+    # every verified cosignature counts, also several per witness: filter by time first, then
+    # count witness names, so the result does not depend on the order of the signature lines
+    stamps: dict = {}
+    for v, info in verified:
+        if v.sig_type == n.TYPE_COSIGNATURE_V1:
+            stamps.setdefault(v.name, []).append(info['timestamp'])
+    if len(stamps) < quorum:
+        raise n.NoteError('%d of %d required witness cosignatures' % (len(stamps), quorum))
     if freshness is not None:
-        fresh = {name for name, timestamp in cosigned.items() if freshness.admits(timestamp)}
+        fresh = {name for name, times in stamps.items() if any(freshness.admits(t) for t in times)}
         if len(fresh) < quorum:
-            outside = ', '.join('%s (time %d)' % (name, cosigned[name]) for name in sorted(set(cosigned) - fresh))
+            outside = ', '.join('%s (time %d)' % (name, max(stamps[name])) for name in sorted(set(stamps) - fresh))
             raise StaleCosignatures('%d of %d required witness cosignatures inside [%d, %d]; outside: %s' % (
                 len(fresh), quorum, freshness.now - freshness.max_age, freshness.now + freshness.max_future,
                 outside))

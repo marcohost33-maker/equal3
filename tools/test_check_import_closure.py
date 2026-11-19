@@ -189,6 +189,9 @@ class Violations(TreeTest):
             'import inspect, helper\nm = inspect.getmembers(helper)\n',
             'import helper\nm = helper.__getattribute__("import" + "lib")\n',
             'import helper\nmatch helper:\n    case object(importlib=m):\n        pass\n',
+            # Codex P2 on 2dc2dce: a class pattern captures attrgetter / methodcaller
+            'import operator\nmatch operator:\n    case object(attrgetter=lookup):\n        pass\n',
+            'import operator\nmatch operator:\n    case object(methodcaller=call):\n        pass\n',
             'from sys import *\n',
             'from sys import modules\n',
             'import sys as s\n',
