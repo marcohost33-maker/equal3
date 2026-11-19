@@ -77,10 +77,18 @@ class Witness:
             return 403, '%s\n' % exc
         # store and later serve only the log signatures verified here: a request may carry extra
         # lines, e.g. a forged one under this witness's own key ID, that would break the served note
+        # Invariant: the stored note plus this witness's cosignature must still parse. So keep at most
+        # one line per verified key (a repeated public signature adds nothing) and leave one slot free.
         kept = {(v.name, v.key_id) for v in verified}
-        note_bytes = note.text + b'\n' + ''.join(
-            '%s %s %s\n' % (n.EM_DASH, sig.name, n.b64encode(sig.key_id + sig.payload))
-            for sig in note.signatures if (sig.name, sig.key_id) in kept).encode('utf-8')
+        lines, seen = [], set()
+        for sig in note.signatures:
+            ident = (sig.name, sig.key_id)
+            if ident in kept and ident not in seen:
+                seen.add(ident)
+                lines.append('%s %s %s\n' % (n.EM_DASH, sig.name, n.b64encode(sig.key_id + sig.payload)))
+        if len(lines) > n.MAX_SIGNATURES - 1:
+            return 400, 'too many log signatures to add a cosignature\n'
+        note_bytes = note.text + b'\n' + ''.join(lines).encode('utf-8')
         if old > checkpoint.size:
             return 400, 'old size larger than checkpoint size\n'
         with closing(self._connect()) as db:
