@@ -139,6 +139,98 @@ class Violations(TreeTest):
                 self.assertEqual(self.kinds(), ['dynamic-import'])
                 self.assertEqual(self.run_main()[0], 1)
 
+    def assert_fails_closed(self, sources):
+        for source in sources:
+            with self.subTest(source=source):
+                self.tree(writer=source, helper='X = 1\n')
+                self.assertEqual(self.kinds(), ['dynamic-import'])
+                self.assertEqual(self.run_main()[0], 1)
+
+    def test_reported_exploits_e3_v1(self):
+        # both passed with exit 0 at be0ec99: the function name is computed, not written
+        self.assert_fails_closed((
+            'import importlib\nm = getattr(importlib, "import_" + "module")("legacy_state_store")\n',
+            'import builtins\nm = vars(builtins)["__imp" + "ort__"]("legacy_state_store")\n'))
+
+    def test_any_mention_of_the_import_machinery_fails_closed(self):
+        n = 'n = input()\n'
+        self.assert_fails_closed((
+            'import builtins\nm = builtins.__dict__["__imp" + "ort__"]("x")\n',
+            'import importlib\nm = importlib.__dict__["import_" + "module"]("x")\n',
+            n + 'm = globals()["__builtins__"]["__import__"](n)\n',
+            'import importlib\nm = locals()["import" + "lib"]\n',
+            n + 'm = __builtins__["__import__"](n)\n',
+            'import builtins\nm = getattr(builtins, "__imp" + "ort__")("x")\n',
+            'import sys\nm = getattr(sys.modules["importlib"], "import_" + "module")("x")\n',
+            'import importlib as il\nm = il\n',
+            'import importlib, operator\nm = operator.attrgetter("import_" + "module")(importlib)\n',
+            'import importlib\nfrom operator import methodcaller\nm = methodcaller("import_module", "x")(importlib)\n',
+            n + 'import pkgutil\nm = pkgutil.resolve_name(n)\n',
+            n + 'import zipimport\nm = zipimport.zipimporter(n)\n',
+            n + 'import imp\nm = imp.load_source(n, n)\n',
+            n + 'm = __spec__.loader\n',
+            n + 'm = __loader__\n',
+            'import sys\nsys.meta_path.insert(0, object())\n',
+            'import sys\nsys.path_hooks.append(object)\n',
+            'import sys\nsys.path.insert(0, "/elsewhere")\n',
+            'import os\nm = os.sys.modules\n',
+            'from helper import importlib\n',
+            'from helper import import_module\n',
+            'm = __import__("importlib")\n',
+            'import importlib\nm = importlib.import_module("builtins")\n',
+            'import importlib\nm = importlib.import_module(".x", package="p")\n',
+            'm = __import__("x", None, None, ["y"])\n',
+            'import importlib.util\nf = importlib.util.find_spec\n',
+            'import site\nsite.addsitedir("/elsewhere")\n',
+            'import sys\nb = sys._getframe().f_back\n',
+            'b = (lambda: 0).__globals__["x"]\n',
+            's = ().__class__.__base__.__subclasses__()\n',
+            'import gc\nm = gc.get_objects()\n',
+            'import inspect, helper\nm = inspect.getmembers(helper)\n',
+            'import helper\nm = helper.__getattribute__("import" + "lib")\n',
+            'import helper\nmatch helper:\n    case object(importlib=m):\n        pass\n',
+            'from sys import *\n',
+            'from sys import modules\n',
+            'import sys as s\n',
+            'import sys\nx = sys\n',
+            'from builtins import getattr\n'))
+
+    def test_attribute_lookup_by_a_computed_name_fails_closed(self):
+        # a first-party module that imported importlib re-exports it as an attribute
+        self.assert_fails_closed((
+            'import helper\nm = getattr(helper, "import" + "lib")\n',
+            'import operator, helper\nm = operator.attrgetter("import" + "lib")(helper)\n',
+            'import helper\ng = getattr\n',
+            'import helper\na = (helper, "x")\nm = getattr(*a)\n',
+            'from operator import attrgetter as ag\n',
+            'import helper\nfor f in ("importlib",):\n    m = getattr(helper, f)\n',
+            'import helper\nm = getattr(helper, "sys")\n',
+            'import helper\nm = [getattr(helper, f) for f in ("a",)]\n',
+            'import helper\nfor f in ("a",):\n    m = getattr(helper, f)\n',  # module scope
+            'import helper\ndef g(n):\n    for f in ("a",):\n        f = n\n        m = getattr(helper, f)\n',
+            'import helper\ndef g(n):\n    for f in ("a",):\n        m = getattr(helper, f)\n'
+            '    def h():\n        nonlocal f\n        f = n\n',
+            'import helper\ndef g(n):\n    for f in ("a", n):\n        m = getattr(helper, f)\n'))
+
+    def test_innocent_code_is_not_caught_by_the_machinery_rule(self):
+        sources = (
+            '"""Mentions importlib, __import__ and sys.modules in prose."""\n'
+            '# import importlib; vars(builtins)["__import__"]\nNAME = "importlib"\n',
+            'class C:\n    module = 1\n    def modules(self):\n        return 2\n'
+            'x = C().module + C().modules()\n',
+            'import os, sys\nx = sys.platform, sys.version_info\nf = getattr(os, "O_CLOEXEC", 0)\n'
+            'print(x, file=sys.stderr)\n',
+            'def check(i):\n    for field in ("store_id", "digest"):\n        s = getattr(i, field)\n'
+            '        if s != s.lower():\n            raise ValueError(field)\n',
+            'import importlib\nfrom importlib import import_module\na = importlib.import_module("engine")\n'
+            'b = __import__("engine")\nc = import_module("engine")\n',
+            'import json\nfrom pathlib import Path\nx = json.dumps({"module": Path(".").name})\n')
+        for source in sources:
+            with self.subTest(source=source):
+                self.tree(writer=source, engine=ENGINE)
+                self.assertEqual(self.violations(), [])
+                self.assertEqual(self.run_main()[0], 0)
+
     def test_unparsable_module_fails_closed(self):
         self.tree(writer='import broken\n', broken='def f(:\n')
         self.assertEqual(self.violations(), [('unparsable', 'broken', 'SyntaxError')])
@@ -222,6 +314,14 @@ class ResearchTree(unittest.TestCase):
             with self.subTest(entry=entry):
                 report = cic.analyse(cic.RESEARCH, [entry])
                 self.assertIn(['legacy-write-api', 'state_store', 'StateStore.apply'], report['violations'])
+
+    def test_the_machinery_rule_finds_nothing_in_the_real_closures(self):
+        # positive control for E3-V1: anchor_wire.validate_intent loops getattr over literal names
+        for entry in ('writer_service_v0714', 'anchored_writer_v0715', 'anchor_wire', 'anchor_protocol'):
+            with self.subTest(entry=entry):
+                report = cic.analyse(cic.RESEARCH, [entry])
+                self.assertEqual([v for v in report['violations'] if v[0] == 'dynamic-import'], [])
+        self.assertIn('anchor_wire', cic.analyse(cic.RESEARCH, cic.DEFAULT_ENTRIES)['closure'])
 
 
 if __name__ == '__main__':

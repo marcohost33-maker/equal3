@@ -23,14 +23,18 @@ first-party module that the entry modules can reach, and reports as violations:
                          sys.modules / meta_path / path_hooks / path_importer_cache / path or a
                          private sys attribute;
                        - module loaders by name (spec_from_file_location, exec_module, run_path,
-                         find_spec, reload, ...), also as an attribute of any object;
-                       - lookups that turn names into strings: globals(), locals(), vars(),
-                         __dict__, __globals__, f_globals / f_locals / f_builtins, _getframe,
-                         __subclasses__, __getattribute__, __getattr__, inspect.getmembers;
+                         find_spec, reload, site.addsitedir, ...), also as an attribute of any
+                         object;
+                       - lookups that turn names into strings or enumerate live objects:
+                         globals(), locals(), vars(), __dict__, __globals__, f_globals /
+                         f_locals / f_builtins, _getframe, __subclasses__, __getattribute__,
+                         __getattr__, inspect.getmembers, gc.get_objects / get_referents /
+                         get_referrers;
                        - getattr / operator.attrgetter / methodcaller whose attribute name is not
-                         a string literal (sole exception: a loop variable whose only binding is
-                         a `for` over a tuple or list of string literals) or names one of the
-                         identifiers above; a match-class keyword pattern naming one of them;
+                         a string literal (sole exception: inside a function, a loop variable
+                         whose only binding is a `for` over a tuple or list of string literals)
+                         or names one of the identifiers above; a match-class keyword pattern
+                         naming one of them;
                        - a relative import.
                        NOT detected, so a pass does not exclude them: exec / eval / compile of
                        source text; ctypes and other C extensions; library code that imports by a
@@ -82,14 +86,14 @@ SYS_IMPORT_STATE = {'modules', 'meta_path', 'path_hooks', 'path_importer_cache',
 LOADER_NAMES = {'spec_from_file_location', 'module_from_spec', 'exec_module', 'load_module',
                 'SourceFileLoader', 'run_path', 'run_module', 'find_spec', 'find_loader',
                 'find_module', 'get_loader', 'load_source', 'load_compiled', 'load_dynamic',
-                'load_package', 'zipimporter', 'resolve_name', 'reload'}
-# lookups that hand out a namespace by string, so that an import function can be found by a
-# computed name without its name appearing in the source
+                'load_package', 'zipimporter', 'resolve_name', 'reload', 'addsitedir'}
+# lookups that hand out a namespace by string, or enumerate live objects, so that an import
+# function can be found by a computed name without its name appearing in the source
 INTROSPECTION_NAMES = {'globals', 'locals', 'vars', '__dict__', '__globals__', '__builtins__',
                        '__loader__', '__spec__', 'f_globals', 'f_locals', 'f_builtins', '_getframe',
                        '__subclasses__', '__getattribute__', '__getattr__', 'getattr_static',
-                       'getmembers', 'getmembers_static', 'meta_path', 'path_hooks',
-                       'path_importer_cache'}
+                       'getmembers', 'getmembers_static', 'get_objects', 'get_referents',
+                       'get_referrers', 'meta_path', 'path_hooks', 'path_importer_cache'}
 # every identifier that reaches the machinery when it appears as a name, an attribute of any
 # object, an imported name or a looked-up string
 MACHINERY_IDENTIFIERS = (DYNAMIC_IMPORT_NAMES | MACHINERY_MODULES | {'sys', '__builtins__'}
@@ -146,7 +150,8 @@ def _loop_literals(name: ast.Name, parent: Dict[int, ast.AST], tree: ast.Module)
     """The strings a loop variable can hold, or None when they are not statically known.
 
     Known only when `name` sits in the body of a `for` over a tuple/list of string literals that
-    binds it, in the same scope, and nothing else in that scope (or any `global`) rebinds it.
+    binds it, inside a function (a module or class variable can be rebound from outside while
+    the loop runs), and nothing else in that function (or any `global`) rebinds it.
     """
     node: ast.AST = name
     while True:
@@ -166,7 +171,7 @@ def _loop_literals(name: ast.Name, parent: Dict[int, ast.AST], tree: ast.Module)
     scope = loop
     while not isinstance(scope, _SCOPES):
         scope = parent[id(scope)]
-    if _bindings(scope, name.id) != 1:
+    if not isinstance(scope, (ast.FunctionDef, ast.AsyncFunctionDef)) or _bindings(scope, name.id) != 1:
         return None
     if any(isinstance(n, ast.Global) and name.id in n.names for n in ast.walk(tree)):
         return None
