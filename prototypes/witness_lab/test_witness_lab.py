@@ -172,6 +172,39 @@ class WitnessProtocol(TempDirTest):
         verified = n.verify_note(n.parse_note(served), [self.log.signer.verifier, wv])
         self.assertEqual(set(verified), {self.log.signer.verifier, wv})
 
+    def test_repeated_log_signature_leaves_room_for_cosignature(self):
+        # Codex review on 7d104ea: the public log signature repeated 64 times passed verification and
+        # was stored; the served note then carried 65 signatures and parse_note rejected it.
+        self.log.append(*events(b'e', 0, 6))
+        signed = self.log.signed_checkpoint()
+        sig_line = signed[signed.rfind(b'\n\n') + 2:]
+        note = signed + sig_line * (n.MAX_SIGNATURES - 1)  # exactly MAX_SIGNATURES lines, parses
+        self.assertEqual(len(n.parse_note(note).signatures), n.MAX_SIGNATURES)
+        status, body = self.add(0, build_request(0, [], note))
+        self.assertEqual(status, 200, body)
+        stored = self.w.latest(ORIGIN)[2]
+        self.assertEqual(stored, signed)
+        served = stored + self.w.signer.signature_line(n.parse_note(stored).text, 1_900_000_000).encode()
+        wv = self.w.signer.verifier
+        self.assertEqual(set(n.verify_note(n.parse_note(served), [self.log.signer.verifier, wv])),
+                         {self.log.signer.verifier, wv})
+
+    def test_distinct_log_signatures_must_leave_one_slot(self):
+        # same invariant with distinct, all verified log keys: 63 fit next to the cosignature, 64 do not
+        self.log.append(*events(b'e', 0, 6))
+        signers = [n.Signer('log.example/k%d' % i, n.TYPE_ED25519) for i in range(n.MAX_SIGNATURES)]
+        for count, expected in ((n.MAX_SIGNATURES, 400), (n.MAX_SIGNATURES - 1, 200)):
+            keys = [s.verifier for s in signers[:count]]
+            w = Witness(self.dir / ('w%d.sqlite' % count), n.Signer('witness.example/b', n.TYPE_COSIGNATURE_V1),
+                        {ORIGIN: keys}, clock=Clock())
+            note = n.sign_checkpoint(self.log.checkpoint(), signers[:count])
+            status, body = w.add_checkpoint(build_request(0, [], note))
+            self.assertEqual(status, expected, (count, body))
+            if status == 200:
+                stored = w.latest(ORIGIN)[2]
+                served = stored + w.signer.signature_line(n.parse_note(stored).text, 1_900_000_000).encode()
+                self.assertEqual(len(n.parse_note(served).signatures), n.MAX_SIGNATURES)
+
     def test_status_codes(self):
         self.log.append(*events(b'e', 0, 8))
         self.assertEqual(self.add(0)[0], 200)
