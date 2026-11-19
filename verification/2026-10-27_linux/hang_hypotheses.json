@@ -1,0 +1,72 @@
+{
+  "question": "Why did the anchor_wire group not finish in the v0.7.22 audit environment (evidence/v0.7.22/test_evidence.json: 'NOT VERIFIED: legacy multi-process anchor_wire suite TIMEOUT')?",
+  "date": "2026-10-27",
+  "environment": "Linux x86_64, 4 CPUs, Python 3.13.17, cryptography 46.0.4, SQLite 3.45.1, euid 0 unless stated",
+  "hypotheses": [
+    {
+      "id": "H1",
+      "claim": "A long TMPDIR exceeds the AF_UNIX sun_path limit (108 bytes incl. NUL) and the daemon never comes up",
+      "measurements": [
+        {
+          "setup": "anchor_wire alone, TMPDIR length 115",
+          "result": "FAILED (failures=28) in 5.4 s"
+        },
+        {
+          "setup": "test_anchor_wire test_writer_service_v0714 test_anchor_v079 test_external_epoch_witness_v0719 test_external_commit_witness_v0720, TMPDIR length 60/70/71/72/73",
+          "result": "OK"
+        },
+        {
+          "setup": "same, TMPDIR length 74",
+          "result": "FAILED (failures=1): test_anchor_v079...test_separate_uid_can_connect_but_cannot_read_anchor, OSError: AF_UNIX path too long"
+        },
+        {
+          "setup": "same, TMPDIR length 75 / 80 / 85 / 90",
+          "result": "failures=1 / failures=1, errors=24 / failures=30, errors=50 / failures=30, errors=50"
+        }
+      ],
+      "verdict": "REFUTED as a hang cause: it fails fast, it does not hang. KEPT as an environment limit: TMPDIR must be at most 73 characters (now a preflight check in tools/run_test_groups.py)."
+    },
+    {
+      "id": "H2",
+      "claim": "Daemon or helper processes survive a test and keep resources or pipes busy",
+      "measurements": [
+        {
+          "setup": "pgrep -af anchor_wire.py after a full anchor_wire run",
+          "result": "no process"
+        },
+        {
+          "setup": "tools/run_test_groups.py /proc scan of each process group after the leader exited, all 12 groups, root and non-root",
+          "result": "leftover_processes 0 in every group"
+        }
+      ],
+      "verdict": "REFUTED in this environment"
+    },
+    {
+      "id": "H3",
+      "claim": "CPU starvation makes the multi-process tests miss their timing",
+      "measurements": [
+        {
+          "setup": "taskset -c 0 with 3 busy loops on the same core",
+          "result": "Ran 28 tests in 28.0 s, OK"
+        }
+      ],
+      "verdict": "REFUTED as a hang cause: slower, still passes"
+    },
+    {
+      "id": "H4",
+      "claim": "A wall-clock limit of the audit sandbox ended the run",
+      "measurements": [
+        {
+          "setup": "evidence/v0.7.21/suite_summary.json",
+          "result": "anchor group (91 tests incl. anchor_wire) 37.4 s; equal group 14.3 s there vs 3.1-3.4 s here, i.e. that environment was about 4-5x slower"
+        },
+        {
+          "setup": "evidence/v0.7.22/test_evidence.json",
+          "result": "records only 'TIMEOUT', no limit, no traceback"
+        }
+      ],
+      "verdict": "NOT REFUTED, NOT PROVEN: the most consistent explanation, but the audit environment's limit is not documented"
+    }
+  ],
+  "related_runner_defect_found_and_fixed": "tools/run_test_groups.py first read output through a pipe; a helper that leaves the process group and inherits stdout kept the pipe open, so a PASSING group blocked until the helper exited and was reported as a timeout (bpo-26534 class). Negative-first test test_detached_helper_does_not_block_a_passing_group failed on that version and passes after the switch to a temporary file plus waitid(WNOWAIT)."
+}

@@ -1,0 +1,72 @@
+{
+  "group": "anchor_wire",
+  "command": "TMPDIR=/tmp/eq3tmp timeout -k 10 120 python -B -W error::ResourceWarning -m unittest -q test_anchor_wire (cwd research/, euid 0, Python 3.13.17, cryptography 46.0.4, SQLite 3.45.1)",
+  "tree": "repository research/ at 4435627 (byte-identical to the v0.7.22 bundle, verify_provenance OK)",
+  "runs": [
+    {
+      "run": 1,
+      "ran": 28,
+      "seconds": 10.677,
+      "ok": true
+    },
+    {
+      "run": 2,
+      "ran": 28,
+      "seconds": 10.828,
+      "ok": true
+    },
+    {
+      "run": 3,
+      "ran": 28,
+      "seconds": 10.935,
+      "ok": true
+    },
+    {
+      "run": 4,
+      "ran": 28,
+      "seconds": 10.568,
+      "ok": true
+    },
+    {
+      "run": 5,
+      "ran": 28,
+      "seconds": 10.602,
+      "ok": true
+    },
+    {
+      "run": 6,
+      "ran": 28,
+      "seconds": 10.577,
+      "ok": true
+    },
+    {
+      "run": 7,
+      "ran": 28,
+      "seconds": 10.951,
+      "ok": true
+    },
+    {
+      "run": 8,
+      "ran": 28,
+      "seconds": 10.789,
+      "ok": true
+    },
+    {
+      "run": 9,
+      "ran": 28,
+      "seconds": 10.423,
+      "ok": true
+    },
+    {
+      "run": 10,
+      "ran": 28,
+      "seconds": 11.06,
+      "ok": true
+    }
+  ],
+  "passed": 10,
+  "timeouts": 0,
+  "min_s": 10.423,
+  "max_s": 11.06,
+  "mean_s": 10.741
+}

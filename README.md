@@ -15,8 +15,11 @@
 > and recovery; physical power-loss/ENOSPC/VFS tests; tamper-evident transparency-log
 > consistency proofs; encryption including backups and journals; Swiss FADP (DSG) data
 > inventory/retention/DPIA; an independent penetration test.
-> The full v0.7.22 test suite was **not** completed (the multi-process `anchor_wire` group did not
-> finish in the audit environment); a 430/430 pass is **not** claimed.
+> The v0.7.22 audit did **not** complete the full suite (the multi-process `anchor_wire` group did
+> not finish in the audit environment). A later Linux re-run on 2026-10-27 passed 430/430 as root
+> from a byte-identical reconstruction of the bundle ([verification/2026-10-27_linux](verification/2026-10-27_linux/README.md)).
+> That re-run comes from this repository's maintenance channel, not from an independent review,
+> and it does not touch any open P0 item.
 
 Equal3 (also written `===` in the sources) is a line of research code that started with
 questions about minimal information ("how many bits does a state change really need?") and
@@ -98,17 +101,22 @@ git clone https://github.com/marcohost33-maker/equal3.git
 cd equal3
 python3.13 -m venv .venv && . .venv/bin/activate
 pip install -r research/REQUIREMENTS_RESEARCH_GATE.txt   # cryptography==46.0.4
+# (CI installs the same pin hash-locked: pip install --require-hashes --only-binary :all: -r tools/requirements-ci.lock)
 
 # 1) Check that the imported files are byte-identical to the shipped research manifest
 python tools/verify_provenance.py
 
-# 2) Run one test group (run from research/, the modules import each other flat)
+# 2) Run all 12 test groups with a per-group hang limit (JSON evidence optional)
+python tools/run_test_groups.py --expect-total 430 --json /tmp/equal3-groups.json
+
+# or one group by hand (run from research/, the modules import each other flat)
 cd research
 python -B -W error::ResourceWarning -m unittest -q \
     test_commit_request_binding_v0722 test_external_commit_witness_v0720 test_commit_floor_expiry_v0721
 ```
 
-Test groups as used in the v0.7.22 audit (module lists in [.github/workflows/ci.yml](.github/workflows/ci.yml)):
+Test groups as used in the v0.7.22 audit (module lists in [tools/run_test_groups.py](tools/run_test_groups.py),
+the single source used by CI):
 
 | Group | Modules | Reported count (v0.7.22 audit) |
 |---|---|---:|
@@ -123,13 +131,21 @@ Test groups as used in the v0.7.22 audit (module lists in [.github/workflows/ci.
 | rotation | root rotation v0718 | 28 |
 | epoch witness | external epoch witness v0719 | 26 |
 | anchor base | anchor protocol, anchor v077, v078, v079 | 63 |
-| anchor_wire (long run) | anchor wire (multi-process) | 28 (v0.7.21 run; did not finish in v0.7.22) |
+| anchor_wire | anchor wire (multi-process) | 28 (v0.7.21 run; did not finish in v0.7.22) |
 
-The `anchor_wire` group starts helper processes and hung in the v0.7.22 audit environment. CI runs
-it only on manual dispatch with a hard time limit, so that a hang cannot block the other groups.
+The `anchor_wire` group starts helper processes and hung in the v0.7.22 audit environment. On Linux
+it passed 10 of 10 repetitions in about 11 s on 2026-10-27, so CI runs it on every push and pull
+request. Each group has a 300 s limit; a group over the limit is killed with its helper processes
+and counts as a failure.
 
-Some tests need privileges that a normal CI runner does not have (for example the UID/GID sandbox
-test of v0.7.9 is documented as requiring a root-capable POSIX container).
+Four tests need root because they drop to a separate UID (writer v0.7.14 ×3, anchor socket v0.7.9
+×1); without root they are skipped. CI therefore has two jobs: a normal one, where only these 4
+test ids may skip, and a root job that must run all 430 with no skip. Both check every group's
+count against the audit and upload their JSON evidence.
+
+Two environment limits, checked by the runner before any test starts: `TMPDIR` must be at most 73
+characters (longer paths break the tests' AF_UNIX sockets), and as root the interpreter, the
+research modules and `TMPDIR` must be reachable by other users (the tests drop to UID 65534).
 
 ## Local verification of this import
 
@@ -140,9 +156,26 @@ Recorded on 2026-10-26 when this repository was assembled (details in the commit
 - Test groups on **Windows** (Python 3.13.13, cryptography 46.0.4): the package is POSIX-only;
   10 of 11 groups fail at import, the store group partially runs. This is a platform result, not a
   defect claim.
-- Test groups on **Linux** were **not** run locally for this import. The first CI run is the first
-  Linux execution of this exact tree. Until it is green, treat every test count above as historical
-  and self-reported.
+- Test groups on **Linux** were not run locally for the import itself. The first CI run
+  (2026-10-26, commit `4435627`) passed 11 groups (402 tests, 4 of them skipped for lack of root);
+  `anchor_wire` was not run.
+- **2026-10-27, SQLite 3.54.1** ([verification/2026-10-27_sqlite-3.54.1](verification/2026-10-27_sqlite-3.54.1/README.md)):
+  in CI, built from the official amalgamation (SHA3 pins), mapped by the test processes; 430/430 as
+  root, 0 skips; the WAL-reset gate opens without override (it holds on the system SQLite).
+- **2026-10-27, witness lab** ([prototypes/witness_lab](prototypes/witness_lab/README.md), P0-3 mechanism):
+  C2SP signed checkpoints and tlog-witness cosigning. The lab reproduces NR-01 (a joint local rollback
+  is cosigned by the restored local witness) and shows external witnesses catching it. Not operated,
+  not integrated.
+- **2026-10-27, history scaling** ([verification/2026-10-27_history-scaling](verification/2026-10-27_history-scaling/README.md)):
+  at 100k entries an anchor operation takes about 0.9 s (HOLD one row above the cap) and an
+  authenticated read about 1.7 s; proposal in [docs/ADR-002](docs/ADR-002_checkpointed-audit-log.md).
+- **2026-10-27, Linux re-run** ([verification/2026-10-27_linux](verification/2026-10-27_linux/README.md)):
+  flat bundle rebuilt from the mapping, `sha256sum -c MANIFEST_V0722.sha256` rc 0; all 12 groups
+  **430/430 as root with 0 skips**, 430 run with 4 skipped as non-root; `anchor_wire` 10/10.
+  Python 3.13.17, cryptography 46.0.4, SQLite 3.45.1. GitHub Actions reproduced 430/430 as root.
+  Hang hypotheses for the audit (TMPDIR length, leftover processes, CPU starvation, sandbox time
+  limit) are recorded there; the cause in the audit environment is not proven. Same maintenance
+  channel, not an independent review.
 
 ## Repository structure
 
@@ -159,8 +192,10 @@ evidence/
   v0.7.4-v0.7.5/ … v0.7.22/   per-version evidence folders (logs, CSV/JSON, patches)
   fresh-zip-reruns/  rerun logs of the delivered zips (from the 007acc2 knowledge folder)
   manifests/         MANIFEST_V0722.sha256, historical manifests, PATH_MAPPING.tsv
+verification/        later re-runs and measurements of the imported tree (not part of the import)
+prototypes/          design prototypes outside any research version (merkle_audit_log, witness_lab; ADR-002)
 docs/                audit history, roadmap, threat model, ADR, path mapping
-tools/               verify_provenance.py (+ tests)
+tools/               verify_provenance.py, run_test_groups.py (+ tests), requirements-ci.lock
 ```
 
 The original bundle was flat. Files were moved into these folders without changing a byte; see
@@ -216,6 +251,7 @@ Zustand nicht zurückgesetzt wurde: Informationsminimierung (Bit/Shannon/Delta),
 authentifizierter Zustandsspeicher (SQLite, CAS, HMAC-Quittungen) und eine Vertrauensdomäne aus
 externem Zeugen, attestiertem Writer, Rotation, Commit-Floor und Request-Lineage. Das zentrale
 Ergebnis jeder Runde: Ein gemeinsamer Rollback aller lokalen Komponenten wird nicht erkannt (NR-01).
-Die vollständige v0.7.22-Testsuite wurde nicht abgeschlossen; Testzahlen sind selbst gemeldet.
-Unter Linux wurde dieser Stand für den Import lokal **nicht** getestet — der erste CI-Lauf ist die
-erste Linux-Ausführung. Alle Audits liegen im Original unter `reports/audits/`.
+Im v0.7.22-Audit wurde die vollständige Testsuite nicht abgeschlossen. Eine spätere Linux-Nachfahrt
+am 2026-10-27 aus dem byte-identisch rekonstruierten Bundle ergab als root 430/430 ohne Skip, und
+`anchor_wire` lief 10 von 10 Mal durch. Sie stammt aus demselben Wartungskanal, ist also keine
+unabhängige Prüfung. Seither laufen `anchor_wire` und eine root-Lane in jeder CI. Alle Audits liegen im Original unter `reports/audits/`.

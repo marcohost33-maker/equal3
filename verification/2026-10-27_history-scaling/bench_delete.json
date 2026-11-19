@@ -1,0 +1,124 @@
+{
+  "tool": "tools/bench_history_scaling.py",
+  "environment": {
+    "python": "3.13.17",
+    "sqlite": "3.45.1",
+    "platform": "Linux-6.18.44-fc-v165-x86_64-with-glibc2.39",
+    "cpus": 4,
+    "tmpdir": "/tmp/eq3tmp",
+    "tmpdir_fs": "ext2/ext3",
+    "commit": "2ff57dd1018263ace2172ac4f60c51f43ba90a6f"
+  },
+  "percentile_method": "nearest rank; with N < 100 samples P99 equals the maximum",
+  "wall_clock_s": 510.7,
+  "anchor_audit": {
+    "max_audit_rows": 100000,
+    "commits_until_cap": 33333,
+    "points": [
+      {
+        "ledger_rows": 1000,
+        "commits_equivalent": 333,
+        "audit_digest": {
+          "n": 30,
+          "mean_ms": 8.9879,
+          "max_ms": 11.7691,
+          "p50_ms": 8.4155,
+          "p95_ms": 11.7363,
+          "p99_ms": 11.7691
+        }
+      },
+      {
+        "ledger_rows": 10000,
+        "commits_equivalent": 3333,
+        "audit_digest": {
+          "n": 30,
+          "mean_ms": 81.0453,
+          "max_ms": 107.4386,
+          "p50_ms": 74.4597,
+          "p95_ms": 107.0332,
+          "p99_ms": 107.4386
+        }
+      },
+      {
+        "ledger_rows": 100000,
+        "commits_equivalent": 33333,
+        "audit_digest": {
+          "n": 30,
+          "mean_ms": 923.4775,
+          "max_ms": 1097.3694,
+          "p50_ms": 903.9188,
+          "p95_ms": 1058.7025,
+          "p99_ms": 1097.3694
+        }
+      }
+    ],
+    "audit_digest_p50_slope_us_per_row": 9.1147,
+    "cap_plus_one": "HOLD: audit ledger capacity exceeded; operator review required"
+  },
+  "state_store": {
+    "journal_mode": "DELETE",
+    "points": [
+      {
+        "history_receipts": 1000,
+        "read": {
+          "n": 100,
+          "mean_ms": 16.248,
+          "max_ms": 24.2049,
+          "p50_ms": 14.2345,
+          "p95_ms": 23.7502,
+          "p99_ms": 24.0106
+        },
+        "apply_last_segment": {
+          "n": 1000,
+          "mean_ms": 3.9318,
+          "max_ms": 16.3461,
+          "p50_ms": 3.7094,
+          "p95_ms": 5.7418,
+          "p99_ms": 7.7303
+        },
+        "db_bytes": 208896
+      },
+      {
+        "history_receipts": 10000,
+        "read": {
+          "n": 100,
+          "mean_ms": 148.3413,
+          "max_ms": 218.0698,
+          "p50_ms": 142.187,
+          "p95_ms": 187.9422,
+          "p99_ms": 204.1921
+        },
+        "apply_last_segment": {
+          "n": 1000,
+          "mean_ms": 3.5028,
+          "max_ms": 37.8618,
+          "p50_ms": 3.2161,
+          "p95_ms": 5.1138,
+          "p99_ms": 6.3076
+        },
+        "db_bytes": 1761280
+      },
+      {
+        "history_receipts": 100000,
+        "read": {
+          "n": 30,
+          "mean_ms": 1761.3997,
+          "max_ms": 2379.3999,
+          "p50_ms": 1746.0787,
+          "p95_ms": 2176.586,
+          "p99_ms": 2379.3999
+        },
+        "apply_last_segment": {
+          "n": 1000,
+          "mean_ms": 4.4685,
+          "max_ms": 13.4068,
+          "p50_ms": 4.2459,
+          "p95_ms": 6.7673,
+          "p99_ms": 9.1739
+        },
+        "db_bytes": 18096128
+      }
+    ],
+    "read_p50_slope_us_per_receipt": 17.6262
+  }
+}
