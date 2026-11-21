@@ -57,9 +57,18 @@ tolerated.
 
 ## What this does not show
 
-- **Not a boundary.** A static closure says what the source imports. Code in the same process can
-  load a module by other routes; `exec`/`eval` of source text is not detected. The enforcement
-  remains the OS boundary of ADR-003 item 3.
+- **Not a boundary, not a sandbox.** A static closure says what the source imports; it is a
+  structure contract for the project's own reviewed code, not a defence against hostile code.
+  Code in the same process can load a module by other routes; `exec`/`eval` of source text is not
+  detected. The enforcement remains the OS boundary of ADR-003 item 3.
+- **Addendum 2026-11-21 (cross-family review A7-R8).** The reported counterexample
+  (`__builtins__.__dict__[chr(105)+...]('o'+'s')`) and three more (`getattr` on `importlib`,
+  `__import__` through `globals()`, `exec` of a base64 string) were run through this CLI: the first
+  three fail closed (`dynamic-import`), `exec` of base64, `exec(compile(...))`, a string annotation
+  evaluated by `typing.get_type_hints` and `pickle.loads` pass, as the tool's docstring states.
+  For one concrete run these are reported by `tools/runtime_import_witness.py` (PEP 578 audit
+  hook in a child interpreter; `tools/test_runtime_import_witness.py`). It is a witness of one
+  run, not a sandbox.
 - **One entry point.** The default entry is the coordinated writer. A production distribution would
   have to name its real executable; none exists today (`serve()` HOLDs).
 - **A pinned red state is not progress.** The baseline makes drift visible in both directions. It

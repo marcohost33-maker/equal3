@@ -41,11 +41,15 @@ fails closed on a mention, and the list of what it does NOT see is part of the c
                          __import__ / import_module;
                        - a relative import.
                        NOT detected, so a pass does not exclude them: exec / eval / compile of
-                       source text; ctypes and other C extensions; library code that imports by a
-                       string internally (pickle and copyreg, logging.config, unittest.mock.patch,
-                       pydoc.locate, string.Formatter.get_field, ...); a third-party or stdlib
-                       module that re-exports an import function under an unrelated name; a
-                       sys.path changed from outside the module (PYTHONPATH, .pth files)
+                       source text (also base64- or otherwise encoded); ctypes and other C
+                       extensions; library code that imports by a string internally (pickle and
+                       copyreg, logging.config, unittest.mock.patch, pydoc.locate,
+                       string.Formatter.get_field, string annotations evaluated by
+                       typing.get_type_hints, ...); a third-party or stdlib module that re-exports
+                       an import function under an unrelated name; a sys.path changed from outside
+                       the module (PYTHONPATH, .pth files). For one concrete run,
+                       tools/runtime_import_witness.py (PEP 578 audit hook, child process) reports
+                       first-party modules loaded by such routes; that is a witness, not a sandbox
   unparsable           a closure module that is not valid Python source
 
 Imports inside functions, classes, `try` blocks and `if TYPE_CHECKING` blocks all count:

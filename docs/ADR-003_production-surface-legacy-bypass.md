@@ -84,6 +84,15 @@ libsqlite3 (PR #1). A process running **as the writer UID** can still import `st
   edge fails and an unrecorded improvement fails too. The implementing round turns the step into
   a plain run without a baseline. The check does not see `exec`/`eval` of source text, and it is
   not a boundary against code in the same process (decision item 3 stays the boundary).
+  **Scope (2026-11-21, cross-family review A7-R8):** the check is a structure and dependency
+  contract for first-party code that the project writes and reviews. It is not a sandbox for
+  untrusted code; no static analysis of Python can be one, because the set of spellings of a
+  dynamic import is open. The complement for one concrete run is
+  `tools/runtime_import_witness.py`: it imports the entry point in a child interpreter under a
+  PEP 578 audit hook and fails if a first-party module is loaded that the static closure does not
+  contain or whose name is forbidden (including routes the static check cannot see: `exec` of
+  encoded source, pickle, string annotations, executing a source file directly). It only sees
+  what that run executes and is not a boundary either.
 - **Distribution.** The allowlist build contains no legacy module, and importing `legacy_state_store`
   from the installed production package raises `ImportError`.
 - **Adversarial, same UID.** Code started as the writer UID through any path other than the writer

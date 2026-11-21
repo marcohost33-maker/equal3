@@ -55,6 +55,14 @@ All research versions keep the release decision **NO-GO**. Version history of th
   v0.7.22 tree as ADR-003 requires (5 violations). CI compares against
   `verification/2026-11-18_import-closure/baseline.json`: a new violation fails, and so does an
   improvement that was not recorded. 22 hand-made mutants of the tool are killed by its tests.
+- P0-2, run-time complement (2026-11-21, cross-family review A7-R8): `tools/runtime_import_witness.py`
+  (+ 9 tests). Imports the entry modules in a child interpreter under a PEP 578 audit hook
+  (`import` and `open` events) and fails when a first-party module is loaded that the static
+  closure does not contain or whose name is forbidden; `--deny` also raises in the child. Ten
+  bypass routes are covered, five of which the static check cannot see by design (exec of
+  base64 / compiled source, string annotations, pickle, executing a source file). A witness of
+  one run, not a sandbox; the scope of the static check is now stated in ADR-003 as a structure
+  contract for the project's own code.
 - P0-3, cosignature freshness in the witness lab (2026-11-18): `lab_log.Freshness` and the
   `freshness` argument of `accept_checkpoint`. Only cosignatures with a timestamp inside
   `[now - max_age, now + max_future]` (both inclusive) count towards the quorum; otherwise
