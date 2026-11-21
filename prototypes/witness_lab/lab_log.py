@@ -8,6 +8,13 @@ rollback of finding NR-01.
 Client policy: a checkpoint is accepted only with a valid log signature AND cosignatures from
 at least `quorum` distinct trusted witnesses, and it must be consistent with the largest
 checkpoint the client accepted before.
+
+Freshness (optional, `Freshness`): a cosignature states what the witness had seen at its
+timestamp. C2SP tlog-cosignature only says that verifiers MAY reject timestamps in the future;
+how old a cosignature may be is left to the client. With a `Freshness` policy only cosignatures
+with  now - max_age <= timestamp <= now + max_future  count towards the quorum, so a replayed
+old checkpoint, whose signatures are all genuine, no longer satisfies a client whose own state
+was rolled back. `now` comes from the caller: the bound is only as good as that clock.
 """
 from __future__ import annotations
 
@@ -64,17 +71,56 @@ class RollbackDetected(Exception):
     pass
 
 
+class StaleCosignatures(n.NoteError):
+    """Enough valid witness cosignatures, but too few inside the freshness window."""
+
+
+@dataclass(frozen=True)
+class Freshness:
+    """Seconds since the UNIX epoch, like the cosignature timestamp. Both bounds are inclusive."""
+    now: int
+    max_age: int
+    max_future: int = 0
+
+    def __post_init__(self):
+        for field in ('now', 'max_age', 'max_future'):
+            value = getattr(self, field)
+            if type(value) is not int or value < 0 or value > n.MAX_U63:
+                raise ValueError('%s must be a non-negative integer below 2^63' % field)
+        if self.now == 0:
+            raise ValueError('now must be a real time, not zero')
+
+    def admits(self, timestamp: int) -> bool:
+        return self.now - self.max_age <= timestamp <= self.now + self.max_future
+
+
 def accept_checkpoint(state: ClientState, signed: bytes, log_key: n.Verifier, witnesses: Sequence[n.Verifier],
-                      quorum: int, proof: Sequence[bytes]) -> ClientState:
-    """Return the new client state, or raise if the checkpoint must not be trusted."""
+                      quorum: int, proof: Sequence[bytes], freshness: Freshness | None = None) -> ClientState:
+    """Return the new client state, or raise if the checkpoint must not be trusted.
+
+    Without `freshness` the cosignature timestamps are not bounded (replay of an old,
+    genuinely cosigned checkpoint is then accepted by a client with rolled-back state).
+    """
     note = n.parse_note(signed)
     checkpoint = n.parse_checkpoint_text(note.text)
-    verified = n.verify_note(note, [log_key, *witnesses])
-    if log_key not in verified:
+    verified = n.verify_note_signatures(note, [log_key, *witnesses])
+    if log_key not in {v for v, _ in verified}:
         raise n.NoteError('no valid log signature')
-    cosigners = {v.name for v in verified if v.sig_type == n.TYPE_COSIGNATURE_V1}
-    if len(cosigners) < quorum:
-        raise n.NoteError('%d of %d required witness cosignatures' % (len(cosigners), quorum))
+    # every verified cosignature counts, also several per witness: filter by time first, then
+    # count witness names, so the result does not depend on the order of the signature lines
+    stamps: dict = {}
+    for v, info in verified:
+        if v.sig_type == n.TYPE_COSIGNATURE_V1:
+            stamps.setdefault(v.name, []).append(info['timestamp'])
+    if len(stamps) < quorum:
+        raise n.NoteError('%d of %d required witness cosignatures' % (len(stamps), quorum))
+    if freshness is not None:
+        fresh = {name for name, times in stamps.items() if any(freshness.admits(t) for t in times)}
+        if len(fresh) < quorum:
+            outside = ', '.join('%s (time %d)' % (name, max(stamps[name])) for name in sorted(set(stamps) - fresh))
+            raise StaleCosignatures('%d of %d required witness cosignatures inside [%d, %d]; outside: %s' % (
+                len(fresh), quorum, freshness.now - freshness.max_age, freshness.now + freshness.max_future,
+                outside))
     if checkpoint.size < state.size:
         raise RollbackDetected('checkpoint size %d below accepted size %d' % (checkpoint.size, state.size))
     if state.size and not merkle_log.verify_consistency(state.size, checkpoint.size, state.root, checkpoint.root,

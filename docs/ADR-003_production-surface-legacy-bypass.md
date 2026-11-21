@@ -23,6 +23,7 @@ anchor_protocol       -> equal3, state_store
 anchor_wire           -> anchor_protocol, commit_evidence_v0716, external_epoch_witness_v0719,
                          trust_rotation_v0718, writer_service_v0714
 commit_evidence_v0716 <-> anchor_wire <-> trust_rotation_v0718 <-> external_epoch_witness_v0719 (cycle)
+runtime_gate_v0711    -> anchor_wire, runtime_evidence_v0710   (added 2026-11-18, see below)
 store_cli             -> equal3, state_store                (calls StateStore.apply directly)
 guarded_store         -> state_store, witness               (local witness only, NR-01)
 ```
@@ -31,6 +32,13 @@ guarded_store         -> state_store, witness               (local witness only,
 `apply`, `checkpoint`, `backup_verified`). It is reachable from every service module. A rule like
 "exclude legacy modules from the start path" therefore cannot be met by choosing modules. The
 anchor, the protocol and the writer modules also import each other in a cycle.
+
+**Correction, 2026-11-18.** The cycle is larger than the four modules listed above.
+`tools/check_import_closure.py` finds one strongly connected group of six: the four above plus
+`writer_service_v0714` and `runtime_gate_v0711` (`anchor_wire` imports `writer_service_v0714`, which
+imports `runtime_gate_v0711`, which imports `sqlite_wal_reset_safe` from `anchor_wire`). The writer
+service is therefore inside the cycle, not only next to it. `trust_rotation_v0718` imports
+`anchor_wire` inside a function, which a module-level scan misses.
 
 **What enforces the boundary today is the operating system, inside the research fixture:**
 - `serve()` requires a distinct non-root writer UID;
@@ -61,15 +69,30 @@ libsqlite3 (PR #1). A process running **as the writer UID** can still import `st
    - The production distribution is an explicit allowlist of files. A build check fails if it
      contains `legacy_state_store`, `store_cli`, `guarded_store`, `run_*`, `bench*` or test modules,
      or if the import closure of the writer entry point reaches any of them.
-4. **Break the import cycle** between `anchor_wire`, `commit_evidence_v0716`, `trust_rotation_v0718`
-   and `external_epoch_witness_v0719`, so that the import closure becomes a meaningful, checkable
-   artifact.
+4. **Break the import cycle** between `anchor_wire`, `commit_evidence_v0716`, `trust_rotation_v0718`,
+   `external_epoch_witness_v0719`, `writer_service_v0714` and `runtime_gate_v0711` (six modules, see
+   the correction above), so that the import closure becomes a meaningful, checkable artifact.
 
 ## Acceptance tests for the implementing round (negative first)
 
 - **Import closure.** The writer entry point is computed statically (AST), and the build fails if
   `StateStore.apply` or any legacy module is reachable. On today's tree this check must fail
   (red first).
+  **Check built 2026-11-18:** `tools/check_import_closure.py`. It is red on the v0.7.22 tree, as
+  required: 4 legacy mutators reachable through `state_store` and the six-module cycle. CI pins
+  that red state against `verification/2026-11-18_import-closure/baseline.json`, so a new legacy
+  edge fails and an unrecorded improvement fails too. The implementing round turns the step into
+  a plain run without a baseline. The check does not see `exec`/`eval` of source text, and it is
+  not a boundary against code in the same process (decision item 3 stays the boundary).
+  **Scope (2026-11-21, cross-family review A7-R8):** the check is a structure and dependency
+  contract for first-party code that the project writes and reviews. It is not a sandbox for
+  untrusted code; no static analysis of Python can be one, because the set of spellings of a
+  dynamic import is open. The complement for one concrete run is
+  `tools/runtime_import_witness.py`: it imports the entry point in a child interpreter under a
+  PEP 578 audit hook and fails if a first-party module is loaded that the static closure does not
+  contain or whose name is forbidden (including routes the static check cannot see: `exec` of
+  encoded source, pickle, string annotations, executing a source file directly). It only sees
+  what that run executes and is not a boundary either.
 - **Distribution.** The allowlist build contains no legacy module, and importing `legacy_state_store`
   from the installed production package raises `ImportError`.
 - **Adversarial, same UID.** Code started as the writer UID through any path other than the writer

@@ -196,14 +196,23 @@ def verify_note(note: Note, verifiers: Sequence[Verifier]) -> Dict[Verifier, dic
     Unknown keys are ignored. A known key whose signature fails rejects the whole note,
     and so does a note without any verified signature (signed-note, Signatures).
     """
+    return dict(verify_note_signatures(note, verifiers))
+
+
+def verify_note_signatures(note: Note, verifiers: Sequence[Verifier]) -> List[Tuple[Verifier, dict]]:
+    """Like verify_note, but every verified signature in note order, also several per key.
+
+    A key may sign more than once (a witness refreshing an unchanged checkpoint); callers that
+    filter by timestamp need all of them, not the last one.
+    """
     known = {(v.name, v.key_id): v for v in verifiers}
-    verified: Dict[Verifier, dict] = {}
+    verified: List[Tuple[Verifier, dict]] = []
     for sig in note.signatures:
         verifier = known.get((sig.name, sig.key_id))
         if verifier is None:
             continue
         try:
-            verified[verifier] = verifier.verify(note.text, sig.payload)
+            verified.append((verifier, verifier.verify(note.text, sig.payload)))
         except (InvalidSignature, NoteError) as exc:
             raise NoteError('signature from known key %s failed to verify' % sig.name) from exc
     if not verified:

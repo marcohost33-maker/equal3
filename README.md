@@ -166,6 +166,12 @@ Recorded on 2026-10-26 when this repository was assembled (details in the commit
   C2SP signed checkpoints and tlog-witness cosigning. The lab reproduces NR-01 (a joint local rollback
   is cosigned by the restored local witness) and shows external witnesses catching it. Not operated,
   not integrated.
+- **2026-11-18, import closure and cosignature freshness** (P0-2 / P0-3, tooling and lab only):
+  [verification/2026-11-18_import-closure](verification/2026-11-18_import-closure/README.md). The static
+  import-closure check of ADR-003 is red on the v0.7.22 tree, as intended (legacy write API reachable
+  from the writer entry point, six-module import cycle), and CI pins that state. The witness lab
+  client can bound the age of witness cosignatures, which stops the replay of an old, genuinely
+  cosigned checkpoint. No research file changed; no release gate is closed.
 - **2026-10-27, history scaling** ([verification/2026-10-27_history-scaling](verification/2026-10-27_history-scaling/README.md)):
   at 100k entries an anchor operation takes about 0.9 s (HOLD one row above the cap) and an
   authenticated read about 1.7 s; proposal in [docs/ADR-002](docs/ADR-002_checkpointed-audit-log.md).
