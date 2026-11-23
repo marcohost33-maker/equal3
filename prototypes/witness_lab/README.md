@@ -19,10 +19,12 @@ From the C2SP editor's copies (github.com/C2SP/C2SP @ `fea9004`, fetched 2026-10
 
 ## Results
 
-`test_witness_lab.py`, 39 tests. The first 33 were run as root and non-root on Linux (locally and in
+`test_witness_lab.py`, 42 tests. The first 33 were run as root and non-root on Linux (locally and in
 CI run 40931419436 for the R12 tests) and on Windows (Python 3.14.4). The six freshness tests
 (2026-11-18) were run on Linux as root, Python 3.13.18, cryptography 50.0.1 (not the locked 46.0.4);
-CI runs them non-root with the locked version.
+CI runs them non-root with the locked version. Three more came with the Codex follow-ups of
+2026-11-19: two for the stored note leaving room for the cosignature (`f4822e7`) and one for the
+order-independent freshness check (`dafc6ec`).
 
 | Scenario | Outcome |
 |---|---|
