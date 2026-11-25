@@ -48,7 +48,7 @@ All research versions keep the release decision **NO-GO**. Version history of th
   `diskriminierung.py` (one further mutant is equivalent on CPython 3.14). The HTTP test found a vkey parsing bug, fixed with a
   regression test. Runs in the non-root CI job.
 
-- P0-2, first ADR-003 acceptance test (2026-11-18): `tools/check_import_closure.py` (+ 23 tests).
+- P0-2, first ADR-003 acceptance test (2026-11-18): `tools/check_import_closure.py` (+ 23 tests; 28 since the E3-V1 follow-up `2dc2dce`, 2026-11-19).
   Static (AST) import closure of the writer entry point `anchored_writer_v0715`; reports reachable
   legacy modules, the legacy write API (`StateStore.create/apply/checkpoint/backup_verified`),
   import cycles, and dynamic imports or file loaders it cannot resolve (fail closed). Red on the
@@ -68,7 +68,8 @@ All research versions keep the release decision **NO-GO**. Version history of th
   `[now - max_age, now + max_future]` (both inclusive) count towards the quorum; otherwise
   `StaleCosignatures`. Six tests, written first and failing on `7d104ea` (the names did not exist;
   the first assertion of the replay test documents that the unchanged client accepts the replayed
-  checkpoint). 15 mutants killed, one equivalent mutant recorded. The lab now has 39 tests.
+  checkpoint). 15 mutants killed, one equivalent mutant recorded. The lab then had 39 tests; 42 after the Codex
+  follow-ups of 2026-11-19 (`f4822e7`, `dafc6ec`).
 
 ### Changed (2026-11-18)
 - `docs/ADR-003`: the import cycle has six modules, not four; it includes `writer_service_v0714`
