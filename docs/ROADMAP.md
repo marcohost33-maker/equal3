@@ -74,6 +74,23 @@ research record; that decision does not change the NO-GO status and does not cre
     `legacy_bypass_elimination` stays open: nothing in the research code changed.
   - Proposed: split engine and legacy shim, writer capability, allowlist distribution with an
     import-closure check, OS policy for the writer UID.
+  - 2026-11-26: implementation candidate of ADR-003 items 1, 2 and 4 as a prototype,
+    [`prototypes/engine_split`](../prototypes/engine_split/README.md).
+    - Its writer entry point `eq3_writer_service` has a clean import closure **without a
+      baseline**: 10 modules, no legacy mutator, no cycle. v0.7.15 on the same tree still has
+      5 violations.
+    - The commit is bound to the anchor's prepared intent, and the key is no longer an attribute.
+    - An allowlist build (`DISTRIBUTION.txt`) cannot import any legacy module.
+    - Behaviour equals v0.7.15 on a differential operation sequence and on two fault points.
+      Mutation run: 25 of 25 killed, after an independent read-only review (F1-F6) and a
+      second self-check.
+    - It drives the persistent and attested research anchors with the same results.
+    - The cost per SET equals v0.7.15 (9 full-history verifications).
+    - The binding to the anchor is caller discipline inside the process, not a boundary.
+    - Evidence: [verification/2026-11-26_engine-split](../verification/2026-11-26_engine-split/README.md).
+    - Still open: OS policy for the writer UID (item 3, adversarial same-UID test), adoption in a
+      research round with an external audit, and an independent anchor (P0-3). The gate
+      `legacy_bypass_elimination` stays open.
 - P0-5 and P0-6 are unchanged and open.
 
 ## Release gates (RELEASE_GATES_V0722.json)

@@ -1,0 +1,35 @@
+{
+  "child_exit": 0,
+  "child_stderr_tail": "",
+  "deny": true,
+  "entries": [
+    "eq3_writer_service"
+  ],
+  "loaded_first_party": [
+    "eq3_anchor_types",
+    "eq3_anchored_writer",
+    "eq3_coordinator",
+    "eq3_engine",
+    "eq3_runtime_evidence",
+    "eq3_runtime_gate",
+    "eq3_wal_gate",
+    "eq3_wire",
+    "eq3_writer_service",
+    "equal3"
+  ],
+  "result": "PASS",
+  "schema": "equal3.runtime-import-witness/1",
+  "static_closure": [
+    "eq3_anchor_types",
+    "eq3_anchored_writer",
+    "eq3_coordinator",
+    "eq3_engine",
+    "eq3_runtime_evidence",
+    "eq3_runtime_gate",
+    "eq3_wal_gate",
+    "eq3_wire",
+    "eq3_writer_service",
+    "equal3"
+  ],
+  "violations": []
+}

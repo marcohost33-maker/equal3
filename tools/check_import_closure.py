@@ -67,7 +67,8 @@ module by another route (sys.path, importlib machinery, C extensions, exec). The
 boundary stays the operating system (ADR-003 item 3). The release decision stays NO-GO.
 
 Usage: python tools/check_import_closure.py [--research-dir DIR] [--entry MODULE ...]
-                                            [--expect-baseline FILE] [--json OUT]
+                                            [--forbid PATTERN ...] [--expect-baseline FILE]
+                                            [--json OUT]
 Stdlib only.
 """
 from __future__ import annotations
@@ -83,7 +84,9 @@ from typing import Dict, Iterable, List, Sequence, Set, Tuple
 RESEARCH = Path(__file__).resolve().parent.parent / 'research'
 DEFAULT_ENTRIES = ('anchored_writer_v0715',)
 FORBIDDEN_MODULES = ('legacy_state_store', 'store_cli', 'guarded_store', 'run_*', 'bench*', 'test_*')
-LEGACY_WRITE_API = {'StateStore': ('create', 'apply', 'checkpoint', 'backup_verified')}
+LEGACY_WRITE_API = {'StateStore': ('create', 'apply', 'checkpoint', 'backup_verified'),
+                    # ADR-003 candidate engine (prototypes/engine_split): held to the same rule
+                    'StateEngine': ('create', 'apply', 'checkpoint', 'backup_verified')}
 DYNAMIC_IMPORT_NAMES = {'__import__', 'import_module'}
 # Fail-closed rule (E3-V1): the import machinery may appear only inside a direct call with one
 # string literal. Every other mention fails, instead of listing the ways it can be reached.
@@ -438,11 +441,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument('--research-dir', type=Path, default=RESEARCH)
     parser.add_argument('--entry', action='append', default=None,
                         help='entry module name (repeatable); default: %s' % ', '.join(DEFAULT_ENTRIES))
+    parser.add_argument('--forbid', action='append', default=[], metavar='PATTERN',
+                        help='further forbidden module name pattern (repeatable), added to the defaults')
     parser.add_argument('--expect-baseline', type=Path)
     parser.add_argument('--json', type=Path)
     args = parser.parse_args(argv)
     try:
-        report = analyse(args.research_dir, args.entry or DEFAULT_ENTRIES)
+        report = analyse(args.research_dir, args.entry or DEFAULT_ENTRIES,
+                         FORBIDDEN_MODULES + tuple(args.forbid))
         baseline = load_baseline(args.expect_baseline) if args.expect_baseline else None
     except ClosureError as exc:
         print('ERROR: %s' % exc, file=sys.stderr)

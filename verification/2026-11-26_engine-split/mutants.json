@@ -1,0 +1,215 @@
+{
+  "python": "3.13.18",
+  "equivalent": [],
+  "mutants": [
+    {
+      "mutant": "M01 no pending-intent check",
+      "killed": true,
+      "failing_tests": [
+        "test_candidate_capability_refuses_without_prepared_intent"
+      ]
+    },
+    {
+      "mutant": "M02 intent comparison off",
+      "killed": true,
+      "failing_tests": [
+        "test_candidate_capability_refuses_a_proposal_other_than_the_prepared_one",
+        "test_candidate_capability_refuses_a_proposal_other_than_the_prepared_one",
+        "test_candidate_capability_refuses_an_intent_with_any_field_that_does_not_fit",
+        "test_candidate_capability_refuses_an_intent_with_any_field_that_does_not_fit",
+        "test_candidate_capability_refuses_a_proposal_other_than_the_prepared_one",
+        "test_candidate_capability_refuses_an_intent_with_any_field_that_does_not_fit"
+      ]
+    },
+    {
+      "mutant": "M23 in-transaction intent comparison off",
+      "killed": true,
+      "failing_tests": [
+        "test_candidate_capability_refuses_an_intent_with_any_field_that_does_not_fit",
+        "test_candidate_capability_refuses_an_intent_with_any_field_that_does_not_fit",
+        "test_candidate_capability_refuses_an_intent_with_any_field_that_does_not_fit",
+        "test_candidate_capability_refuses_an_intent_with_any_field_that_does_not_fit"
+      ]
+    },
+    {
+      "mutant": "M03 target digest not compared",
+      "killed": true,
+      "failing_tests": [
+        "test_candidate_capability_refuses_an_intent_with_any_field_that_does_not_fit",
+        "test_candidate_capability_refuses_an_intent_with_any_field_that_does_not_fit",
+        "test_candidate_capability_refuses_an_intent_with_any_field_that_does_not_fit",
+        "test_candidate_capability_refuses_an_intent_with_any_field_that_does_not_fit"
+      ]
+    },
+    {
+      "mutant": "M04 request id not compared",
+      "killed": true,
+      "failing_tests": [
+        "test_candidate_capability_refuses_an_intent_with_any_field_that_does_not_fit",
+        "test_candidate_capability_refuses_an_intent_with_any_field_that_does_not_fit",
+        "test_candidate_capability_refuses_an_intent_with_any_field_that_does_not_fit"
+      ]
+    },
+    {
+      "mutant": "M05 post-commit check off",
+      "killed": true,
+      "failing_tests": [
+        "test_a_concurrent_commit_of_the_same_intent_is_not_a_success"
+      ]
+    },
+    {
+      "mutant": "M19 no re-check inside the write transaction",
+      "killed": true,
+      "failing_tests": [
+        "test_abort_between_intent_check_and_write_is_honoured"
+      ]
+    },
+    {
+      "mutant": "M20 intent base not checked against the anchor position",
+      "killed": true,
+      "failing_tests": [
+        "test_capability_checks_the_intent_base_against_the_anchor_position"
+      ]
+    },
+    {
+      "mutant": "M21 adjudicate drops evidence",
+      "killed": true,
+      "failing_tests": [
+        "test_persistent_and_attested_anchors_match_research",
+        "test_adjudicate_passes_evidence_to_the_anchor"
+      ]
+    },
+    {
+      "mutant": "M22 coordinator mints its own capability",
+      "killed": true,
+      "failing_tests": [
+        "test_engine_internals_are_used_only_inside_the_engine_module"
+      ]
+    },
+    {
+      "mutant": "M06 public apply alias",
+      "killed": true,
+      "failing_tests": [
+        "test_allowlist_is_complete_and_excludes_lab_and_provisioning",
+        "1 violation",
+        "test_closure_over_the_full_tree_is_clean_without_baseline",
+        "1 violation",
+        "test_public_surface_is_the_reviewed_read_only_set"
+      ]
+    },
+    {
+      "mutant": "M07 key as public attribute",
+      "killed": true,
+      "failing_tests": [
+        "test_public_surface_is_the_reviewed_read_only_set"
+      ]
+    },
+    {
+      "mutant": "M08 coordinator skips anchor prepare",
+      "killed": true,
+      "failing_tests": [
+        "test_answers_and_tables_equal_research_v0715",
+        "test_fault_matrix_matches_research",
+        "test_fault_matrix_matches_research",
+        "test_same_target_committed_by_another_proposal_is_a_conflict_not_a_commit",
+        "test_adjudicate_passes_evidence_to_the_anchor",
+        "test_persistent_and_attested_anchors_match_research",
+        "test_persistent_and_attested_anchors_match_research",
+        "test_research_reads_what_the_candidate_wrote_and_back",
+        "test_tampered_history_is_refused",
+        "test_real_separate_uid_client_against_the_candidate_service",
+        "test_handler_reaches_the_anchored_core_and_refuses_other_uids"
+      ]
+    },
+    {
+      "mutant": "M09 coordinator writes around the capability",
+      "killed": true,
+      "failing_tests": [
+        "test_engine_internals_are_used_only_inside_the_engine_module"
+      ]
+    },
+    {
+      "mutant": "M10 capability binding not checked",
+      "killed": true,
+      "failing_tests": [
+        "test_capability_is_bound_to_its_engine_and_anchor"
+      ]
+    },
+    {
+      "mutant": "M11 serve without anchor",
+      "killed": true,
+      "failing_tests": [
+        "test_serve_holds_without_an_anchor"
+      ]
+    },
+    {
+      "mutant": "M12 handler ignores peer UID",
+      "killed": true,
+      "failing_tests": [
+        "test_real_separate_uid_client_against_the_candidate_service",
+        "test_handler_reaches_the_anchored_core_and_refuses_other_uids"
+      ]
+    },
+    {
+      "mutant": "M13 WAL gate boundary",
+      "killed": true,
+      "failing_tests": [
+        "test_wal_gate_equals_the_research_function"
+      ]
+    },
+    {
+      "mutant": "M14 runtime approval window",
+      "killed": true,
+      "failing_tests": [
+        "test_runtime_gate_is_the_research_file_with_two_imports_changed"
+      ]
+    },
+    {
+      "mutant": "M15 wire imports the service (cycle)",
+      "killed": true,
+      "failing_tests": [
+        "test_engine_split"
+      ]
+    },
+    {
+      "mutant": "M16 writer imports state_store",
+      "killed": true,
+      "failing_tests": [
+        "test_closure_over_the_full_tree_is_clean_without_baseline",
+        "4 violation",
+        "test_legacy_lab_and_provisioning_are_not_importable_from_the_build",
+        "test_runtime_witness_on_the_allowlist_build",
+        "1 violation"
+      ]
+    },
+    {
+      "mutant": "M18 proposal hash not compared",
+      "killed": true,
+      "failing_tests": [
+        "test_candidate_capability_refuses_an_intent_with_any_field_that_does_not_fit",
+        "test_candidate_capability_refuses_an_intent_with_any_field_that_does_not_fit"
+      ]
+    },
+    {
+      "mutant": "M24 built-in _sqlite3 not classified",
+      "killed": true,
+      "failing_tests": [
+        "test_candidate_inventory_reports_built_in_and_the_gate_holds_classified"
+      ]
+    },
+    {
+      "mutant": "M25 coordinator ignores the anchor intent when diagnosing commit",
+      "killed": true,
+      "failing_tests": [
+        "test_same_target_committed_by_another_proposal_is_a_conflict_not_a_commit"
+      ]
+    },
+    {
+      "mutant": "M17 writer core trusts unbound capability",
+      "killed": true,
+      "failing_tests": [
+        "test_capability_is_bound_to_its_engine_and_anchor"
+      ]
+    }
+  ]
+}

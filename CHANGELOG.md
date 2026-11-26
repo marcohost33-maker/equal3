@@ -5,6 +5,41 @@ All research versions keep the release decision **NO-GO**. Version history of th
 
 ## [Unreleased] — repository tooling, research content unchanged
 
+### Added (2026-11-26)
+- P0-2, ADR-003 implementation candidate: `prototypes/engine_split/`, a prototype next to the
+  research tree; no research file changed.
+  - `eq3_engine.StateEngine` has no public mutator. Its write primitive is reachable only
+    through `CommitCapability`, which commits exactly the proposal of the anchor's PREPARED
+    intent. All intent fields are compared before the write. The key is not an attribute.
+  - Genesis creation (`eq3_provision`) and the in-process anchor double (`eq3_anchor_lab`) are
+    outside the writer distribution.
+  - Leaves `eq3_wal_gate` and `eq3_wire` remove the six-module cycle.
+  - The writer entry point `eq3_writer_service` passes `check_import_closure.py` without a
+    baseline: 10 modules, 0 violations. v0.7.15 on the same tree: 5.
+  - Tests: negative first against the v0.7.22 bypass; a differential against v0.7.15
+    (answers and tables equal); fault points; compatibility in both directions; allowlist build
+    with a PEP 578 witness and `ImportError` for legacy, lab and provisioning modules; the RPC
+    handler; derivation pins.
+  - After an independent read-only review (F1-F6), the capability also re-reads the anchor
+    inside the write transaction, checks the intent base against the anchor position, and
+    `adjudicate` forwards `evidence`. Each fix has a test that was red before it.
+  - A second self-check pass:
+    - measured the cost: 10 vs 9 full-history verifications per SET, fixed by comparing base
+      and target digest inside the write transaction (now 9 vs 9);
+    - validated the persistent and attested research anchors with a differential;
+    - classified a built-in `_sqlite3` (static SQLite) as a HOLD in `eq3_runtime_evidence`;
+    - ported the root separate-UID test, with a CI root-lane step that allows no skip;
+    - added a same-target conflict test.
+  - 32 tests; mutation run: 25 of 25 killed. Exploratory cost benchmark
+    `bench_engine_split.py`.
+  - Evidence: `verification/2026-11-26_engine-split/`. CI runs the tests and the full-tree
+    closure in the non-root job.
+- `--forbid PATTERN` (repeatable) for `tools/check_import_closure.py` and
+  `tools/runtime_import_witness.py`. It adds forbidden module patterns to the defaults. Three
+  negative-first tests, red on the unchanged tools (argparse exit 2).
+- `check_import_closure.py`: the legacy-API table also names `StateEngine` (review F5). One
+  negative-first test, red before. The tool tests now count 31 (closure) and 10 (run-time witness).
+
 ### Added
 - `tools/run_test_groups.py` with tests: single source for the 12 test groups, one process group
   per group, 300 s hang limit (timeout and helper processes killed, counted as failure), fail-closed

@@ -2,6 +2,9 @@
 
 - Status: **proposed** (2026-10-27). Not implemented in any research version; implementation belongs in
   a research round with its own manifest, evidence and audit (CONTRIBUTING rule 1).
+  **2026-11-26:** an implementation candidate of items 1, 2 and 4 exists as a prototype next to the
+  research tree, [`prototypes/engine_split`](../prototypes/engine_split/README.md). Its writer closure
+  passes the import-closure check without a baseline. Item 3 (OS policy) is not implemented.
 - Addresses: roadmap **P0-2** ("restrict the production interface to the attested writer, enforce OS
   access rights (separate UID), exclude all legacy modules from the production start path;
   adversarial bypass test") and release gate `legacy_bypass_elimination`.
@@ -100,6 +103,40 @@ libsqlite3 (PR #1). A process running **as the writer UID** can still import `st
   `NoNewPrivileges` / `ProtectSystem`. The lab must show this; the claim is not enough.
 - **Adversarial, other UID.** The existing UID tests stay mandatory in CI as root (no skip allowed).
 - The release decision stays NO-GO until every P0 gate is met. This ADR closes none of them alone.
+
+## Implementation candidate (2026-11-26)
+
+[`prototypes/engine_split`](../prototypes/engine_split/README.md) builds the decision outside the
+research tree. Measured in [verification/2026-11-26_engine-split](../verification/2026-11-26_engine-split/README.md).
+
+- **Item 1.** `eq3_engine.StateEngine` has a read-only public surface (pinned by a test). Genesis
+  creation is in `eq3_provision`, which is not in the distribution. The research `state_store`
+  plays the role of the legacy shim, unchanged.
+- **Item 2.** The write primitive is reachable only through `CommitCapability`. It commits only
+  the proposal that the bound anchor holds as its PREPARED intent: proposal hash, request id,
+  store, base, base digest and target digest are compared before the write.
+  - Base and target digest are compared inside the write transaction, on the values the CAS
+    writes.
+  - The intent's base must equal the anchor position.
+  - The anchor is re-read inside the write transaction, so an ABORT that lands in between
+    stops the write.
+  - This is stricter than the ADR text, which only asked that the anchored writer construct the
+    capability.
+  - Inside the process it is still a discipline: whoever mints a capability chooses its anchor.
+    An AST test pins minting to the engine and the composition root.
+- **Item 4.** The cycle is gone. `sqlite_wal_reset_safe` and the frame constants are leaves
+  (`eq3_wal_gate`, `eq3_wire`), and the service no longer has an unanchored core.
+- **Acceptance test "import closure":** 0 violations for `eq3_writer_service` on the full tree,
+  with no baseline. `anchored_writer_v0715` on the same tree still has 5. Four mutants turn the
+  candidate red.
+- **Acceptance test "distribution":** `DISTRIBUTION.txt` lists 10 files. From that build,
+  `state_store`, `anchor_protocol`, `anchor_wire`, `writer_service_v0714`, `store_cli`, the lab
+  anchor and provisioning raise `ImportError`. The PEP 578 witness sees only the 10 closure
+  modules.
+- **Behaviour:** answers and SQLite tables are equal to research v0.7.15 on a shared operation
+  sequence, and on the fault points after anchor PREPARE and after the SQLite commit.
+- **Not done:** the adversarial same-UID test (item 3, systemd policy), an independent anchor
+  (P0-3), and a research round with an audit outside this channel.
 
 ## Consequences
 
