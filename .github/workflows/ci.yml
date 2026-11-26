@@ -88,6 +88,20 @@ jobs:
       - name: Witness lab (P0-3 prototype, needs cryptography)
         if: ${{ !cancelled() }}
         run: python -m unittest -v prototypes/witness_lab/test_witness_lab.py
+      # ADR-003 implementation candidate (P0-2): engine without public mutators, commit capability
+      # bound to the anchor intent, cycle-free writer closure that passes without a baseline.
+      # A prototype next to the research tree; it closes no release gate.
+      - name: ADR-003 candidate (engine split, allowlist build, differential against v0.7.15)
+        if: ${{ !cancelled() }}
+        run: python -B -W error::ResourceWarning -m unittest -v prototypes/engine_split/test_engine_split.py
+      - name: ADR-003 candidate, writer closure over the full tree is clean without a baseline
+        if: ${{ !cancelled() }}
+        run: |
+          stage="$RUNNER_TEMP/eq3-full"
+          mkdir -p "$stage"
+          cp research/*.py prototypes/engine_split/eq3_*.py "$stage/"
+          python tools/check_import_closure.py --research-dir "$stage" --entry eq3_writer_service \
+            --forbid '*_lab' --forbid eq3_provision --json "$RUNNER_TEMP/engine-split-closure.json"
       - name: Negative control, the WAL-reset gate holds on the runner's unpatched system SQLite
         if: ${{ !cancelled() }}
         run: python tools/check_sqlite_runtime.py --expect-gate hold --json "$RUNNER_TEMP/sqlite-runtime-system.json"
@@ -99,6 +113,7 @@ jobs:
           path: |
             ${{ runner.temp }}/test-groups-nonroot.json
             ${{ runner.temp }}/sqlite-runtime-system.json
+            ${{ runner.temp }}/engine-split-closure.json
           if-no-files-found: error
           retention-days: 90
 

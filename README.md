@@ -172,6 +172,16 @@ Recorded on 2026-10-26 when this repository was assembled (details in the commit
   from the writer entry point, six-module import cycle), and CI pins that state. The witness lab
   client can bound the age of witness cosignatures, which stops the replay of an old, genuinely
   cosigned checkpoint. No research file changed; no release gate is closed.
+- **2026-11-26, ADR-003 implementation candidate** ([prototypes/engine_split](prototypes/engine_split/README.md), P0-2):
+  - The engine has no public mutator, and every commit is bound to the anchor's prepared intent.
+  - The writer entry point `eq3_writer_service` has a clean import closure without a baseline:
+    10 modules, no legacy mutator, no cycle. v0.7.15 on the same tree keeps 5 violations.
+  - An allowlist build cannot import any legacy module.
+  - Answers and SQLite tables equal v0.7.15 on a differential sequence.
+  - 22 tests, 17 of 18 mutants killed
+    ([verification/2026-11-26_engine-split](verification/2026-11-26_engine-split/README.md)).
+  - A prototype next to the research tree: OS policy, an independent anchor and an external
+    audit are open. No gate is closed.
 - **2026-10-27, history scaling** ([verification/2026-10-27_history-scaling](verification/2026-10-27_history-scaling/README.md)):
   at 100k entries an anchor operation takes about 0.9 s (HOLD one row above the cap) and an
   authenticated read about 1.7 s; proposal in [docs/ADR-002](docs/ADR-002_checkpointed-audit-log.md).
@@ -199,7 +209,8 @@ evidence/
   fresh-zip-reruns/  rerun logs of the delivered zips (from the 007acc2 knowledge folder)
   manifests/         MANIFEST_V0722.sha256, historical manifests, PATH_MAPPING.tsv
 verification/        later re-runs and measurements of the imported tree (not part of the import)
-prototypes/          design prototypes outside any research version (merkle_audit_log, witness_lab; ADR-002)
+prototypes/          design prototypes outside any research version (merkle_audit_log, witness_lab,
+                     engine_split; ADR-002/003)
 docs/                audit history, roadmap, threat model, ADR, path mapping
 tools/               verify_provenance.py, run_test_groups.py (+ tests), requirements-ci.lock
 ```

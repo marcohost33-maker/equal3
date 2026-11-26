@@ -67,7 +67,8 @@ module by another route (sys.path, importlib machinery, C extensions, exec). The
 boundary stays the operating system (ADR-003 item 3). The release decision stays NO-GO.
 
 Usage: python tools/check_import_closure.py [--research-dir DIR] [--entry MODULE ...]
-                                            [--expect-baseline FILE] [--json OUT]
+                                            [--forbid PATTERN ...] [--expect-baseline FILE]
+                                            [--json OUT]
 Stdlib only.
 """
 from __future__ import annotations
@@ -438,11 +439,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument('--research-dir', type=Path, default=RESEARCH)
     parser.add_argument('--entry', action='append', default=None,
                         help='entry module name (repeatable); default: %s' % ', '.join(DEFAULT_ENTRIES))
+    parser.add_argument('--forbid', action='append', default=[], metavar='PATTERN',
+                        help='further forbidden module name pattern (repeatable), added to the defaults')
     parser.add_argument('--expect-baseline', type=Path)
     parser.add_argument('--json', type=Path)
     args = parser.parse_args(argv)
     try:
-        report = analyse(args.research_dir, args.entry or DEFAULT_ENTRIES)
+        report = analyse(args.research_dir, args.entry or DEFAULT_ENTRIES,
+                         FORBIDDEN_MODULES + tuple(args.forbid))
         baseline = load_baseline(args.expect_baseline) if args.expect_baseline else None
     except ClosureError as exc:
         print('ERROR: %s' % exc, file=sys.stderr)

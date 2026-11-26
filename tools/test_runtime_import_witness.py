@@ -80,6 +80,14 @@ class NegativeControl(Tree):
         self.assertEqual(self.observe()['violations'], [])
 
 
+    def test_extra_forbidden_pattern_from_the_command_line(self):
+        # ADR-003 candidate: a module the static check forbids is also reported when loaded
+        self.tree(writer='import anchor_lab\n', anchor_lab='X = 1\n')
+        self.assertEqual(self.run_main()[0], 0)
+        rc, out = self.run_main('--forbid', '*_lab')
+        self.assertEqual(rc, 1)
+        self.assertIn('anchor_lab', out)
+
 class PositiveControl(Tree):
     def test_every_bypass_is_seen_at_run_time(self):
         for label, source in BYPASSES.items():

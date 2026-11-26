@@ -1,0 +1,72 @@
+{
+  "closure": [
+    "eq3_anchor_types",
+    "eq3_anchored_writer",
+    "eq3_coordinator",
+    "eq3_engine",
+    "eq3_runtime_gate",
+    "eq3_wal_gate",
+    "eq3_wire",
+    "eq3_writer_service",
+    "equal3",
+    "runtime_evidence_v0710"
+  ],
+  "edges": {
+    "eq3_anchor_types": [],
+    "eq3_anchored_writer": [
+      "eq3_anchor_types",
+      "eq3_coordinator",
+      "eq3_engine",
+      "eq3_wire"
+    ],
+    "eq3_coordinator": [
+      "eq3_anchor_types",
+      "eq3_engine"
+    ],
+    "eq3_engine": [
+      "eq3_anchor_types",
+      "equal3"
+    ],
+    "eq3_runtime_gate": [
+      "eq3_wal_gate",
+      "runtime_evidence_v0710"
+    ],
+    "eq3_wal_gate": [],
+    "eq3_wire": [
+      "eq3_engine"
+    ],
+    "eq3_writer_service": [
+      "eq3_anchor_types",
+      "eq3_anchored_writer",
+      "eq3_engine",
+      "eq3_runtime_gate",
+      "eq3_wire"
+    ],
+    "equal3": [],
+    "runtime_evidence_v0710": []
+  },
+  "entries": [
+    "eq3_writer_service"
+  ],
+  "forbidden_modules": [
+    "legacy_state_store",
+    "store_cli",
+    "guarded_store",
+    "run_*",
+    "bench*",
+    "test_*",
+    "*_lab",
+    "eq3_provision"
+  ],
+  "legacy_write_api": {
+    "StateStore": [
+      "create",
+      "apply",
+      "checkpoint",
+      "backup_verified"
+    ]
+  },
+  "result": "PASS",
+  "schema": "equal3.import-closure/1",
+  "violations": []
+}

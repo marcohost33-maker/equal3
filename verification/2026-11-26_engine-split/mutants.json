@@ -1,0 +1,154 @@
+{
+  "python": "3.13.18",
+  "equivalent": [
+    "M05 post-commit check off"
+  ],
+  "mutants": [
+    {
+      "mutant": "M01 no pending-intent check",
+      "killed": true,
+      "failing_tests": [
+        "test_candidate_capability_refuses_without_prepared_intent"
+      ]
+    },
+    {
+      "mutant": "M02 intent comparison off",
+      "killed": true,
+      "failing_tests": [
+        "test_candidate_capability_refuses_a_proposal_other_than_the_prepared_one",
+        "test_candidate_capability_refuses_a_proposal_other_than_the_prepared_one",
+        "test_candidate_capability_refuses_an_intent_with_any_field_that_does_not_fit",
+        "test_candidate_capability_refuses_an_intent_with_any_field_that_does_not_fit",
+        "test_candidate_capability_refuses_an_intent_with_any_field_that_does_not_fit",
+        "test_candidate_capability_refuses_a_proposal_other_than_the_prepared_one",
+        "test_candidate_capability_refuses_a_proposal_other_than_the_prepared_one",
+        "test_candidate_capability_refuses_an_intent_with_any_field_that_does_not_fit"
+      ]
+    },
+    {
+      "mutant": "M03 target digest not compared",
+      "killed": true,
+      "failing_tests": [
+        "test_candidate_capability_refuses_an_intent_with_any_field_that_does_not_fit",
+        "test_candidate_capability_refuses_an_intent_with_any_field_that_does_not_fit",
+        "test_candidate_capability_refuses_an_intent_with_any_field_that_does_not_fit",
+        "test_candidate_capability_refuses_an_intent_with_any_field_that_does_not_fit"
+      ]
+    },
+    {
+      "mutant": "M04 request id not compared",
+      "killed": true,
+      "failing_tests": [
+        "test_candidate_capability_refuses_an_intent_with_any_field_that_does_not_fit",
+        "test_candidate_capability_refuses_an_intent_with_any_field_that_does_not_fit",
+        "test_candidate_capability_refuses_an_intent_with_any_field_that_does_not_fit"
+      ]
+    },
+    {
+      "mutant": "M05 post-commit check off",
+      "killed": false,
+      "failing_tests": []
+    },
+    {
+      "mutant": "M06 public apply alias",
+      "killed": true,
+      "failing_tests": [
+        "test_public_surface_is_the_reviewed_read_only_set"
+      ]
+    },
+    {
+      "mutant": "M07 key as public attribute",
+      "killed": true,
+      "failing_tests": [
+        "test_public_surface_is_the_reviewed_read_only_set"
+      ]
+    },
+    {
+      "mutant": "M08 coordinator skips anchor prepare",
+      "killed": true,
+      "failing_tests": [
+        "test_answers_and_tables_equal_research_v0715",
+        "test_fault_matrix_matches_research",
+        "test_fault_matrix_matches_research",
+        "test_research_reads_what_the_candidate_wrote_and_back",
+        "test_tampered_history_is_refused",
+        "test_handler_reaches_the_anchored_core_and_refuses_other_uids"
+      ]
+    },
+    {
+      "mutant": "M09 coordinator writes around the capability",
+      "killed": true,
+      "failing_tests": [
+        "test_engine_internals_are_used_only_inside_the_engine_module"
+      ]
+    },
+    {
+      "mutant": "M10 capability binding not checked",
+      "killed": true,
+      "failing_tests": [
+        "test_capability_is_bound_to_its_engine_and_anchor"
+      ]
+    },
+    {
+      "mutant": "M11 serve without anchor",
+      "killed": true,
+      "failing_tests": [
+        "test_serve_holds_without_an_anchor"
+      ]
+    },
+    {
+      "mutant": "M12 handler ignores peer UID",
+      "killed": true,
+      "failing_tests": [
+        "test_handler_reaches_the_anchored_core_and_refuses_other_uids"
+      ]
+    },
+    {
+      "mutant": "M13 WAL gate boundary",
+      "killed": true,
+      "failing_tests": [
+        "test_wal_gate_equals_the_research_function"
+      ]
+    },
+    {
+      "mutant": "M14 runtime approval window",
+      "killed": true,
+      "failing_tests": [
+        "test_runtime_gate_is_the_research_file_with_one_import_changed"
+      ]
+    },
+    {
+      "mutant": "M15 wire imports the service (cycle)",
+      "killed": true,
+      "failing_tests": [
+        "test_engine_split"
+      ]
+    },
+    {
+      "mutant": "M16 writer imports state_store",
+      "killed": true,
+      "failing_tests": [
+        "test_closure_over_the_full_tree_is_clean_without_baseline",
+        "4 violation",
+        "test_legacy_lab_and_provisioning_are_not_importable_from_the_build",
+        "test_runtime_witness_on_the_allowlist_build",
+        "1 violation"
+      ]
+    },
+    {
+      "mutant": "M18 proposal hash not compared",
+      "killed": true,
+      "failing_tests": [
+        "test_candidate_capability_refuses_an_intent_with_any_field_that_does_not_fit",
+        "test_candidate_capability_refuses_an_intent_with_any_field_that_does_not_fit"
+      ]
+    },
+    {
+      "mutant": "M17 writer core trusts unbound capability",
+      "killed": true,
+      "failing_tests": [
+        "test_capability_is_bound_to_its_engine_and_anchor"
+      ]
+    }
+  ]
+}

@@ -31,7 +31,7 @@ What this does NOT show (scope, part of the contract):
 
 Exit status: 0 no violation, 1 violations, 2 the check could not run.
 Usage: python tools/runtime_import_witness.py [--research-dir DIR] [--entry MODULE ...]
-                                              [--deny] [--json OUT]
+                                              [--deny] [--forbid PATTERN ...] [--json OUT]
 Stdlib only.
 """
 from __future__ import annotations
@@ -143,10 +143,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument('--research-dir', type=Path, default=cic.RESEARCH)
     parser.add_argument('--entry', action='append', default=None)
     parser.add_argument('--deny', action='store_true')
+    parser.add_argument('--forbid', action='append', default=[], metavar='PATTERN',
+                        help='further forbidden module name pattern (repeatable), added to the defaults')
     parser.add_argument('--json', type=Path)
     args = parser.parse_args(argv)
     try:
-        report = observe(args.research_dir, args.entry or cic.DEFAULT_ENTRIES, deny=args.deny)
+        report = observe(args.research_dir, args.entry or cic.DEFAULT_ENTRIES, deny=args.deny,
+                         forbidden=cic.FORBIDDEN_MODULES + tuple(args.forbid))
     except cic.ClosureError as exc:
         print('ERROR: %s' % exc, file=sys.stderr)
         return 2

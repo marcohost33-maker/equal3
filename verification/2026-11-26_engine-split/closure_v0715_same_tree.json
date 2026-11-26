@@ -1,0 +1,113 @@
+{
+  "closure": [
+    "anchor_protocol",
+    "anchor_wire",
+    "anchored_writer_v0715",
+    "commit_evidence_v0716",
+    "equal3",
+    "external_epoch_witness_v0719",
+    "runtime_evidence_v0710",
+    "runtime_gate_v0711",
+    "state_store",
+    "trust_rotation_v0718",
+    "writer_service_v0714"
+  ],
+  "edges": {
+    "anchor_protocol": [
+      "equal3",
+      "state_store"
+    ],
+    "anchor_wire": [
+      "anchor_protocol",
+      "commit_evidence_v0716",
+      "external_epoch_witness_v0719",
+      "trust_rotation_v0718",
+      "writer_service_v0714"
+    ],
+    "anchored_writer_v0715": [
+      "anchor_protocol",
+      "state_store",
+      "writer_service_v0714"
+    ],
+    "commit_evidence_v0716": [
+      "anchor_protocol",
+      "anchor_wire",
+      "state_store"
+    ],
+    "equal3": [],
+    "external_epoch_witness_v0719": [
+      "anchor_protocol",
+      "anchor_wire",
+      "commit_evidence_v0716",
+      "trust_rotation_v0718"
+    ],
+    "runtime_evidence_v0710": [],
+    "runtime_gate_v0711": [
+      "anchor_wire",
+      "runtime_evidence_v0710"
+    ],
+    "state_store": [
+      "equal3"
+    ],
+    "trust_rotation_v0718": [
+      "anchor_protocol",
+      "anchor_wire",
+      "commit_evidence_v0716"
+    ],
+    "writer_service_v0714": [
+      "anchor_protocol",
+      "runtime_gate_v0711",
+      "state_store"
+    ]
+  },
+  "entries": [
+    "anchored_writer_v0715"
+  ],
+  "forbidden_modules": [
+    "legacy_state_store",
+    "store_cli",
+    "guarded_store",
+    "run_*",
+    "bench*",
+    "test_*",
+    "*_lab",
+    "eq3_provision"
+  ],
+  "legacy_write_api": {
+    "StateStore": [
+      "create",
+      "apply",
+      "checkpoint",
+      "backup_verified"
+    ]
+  },
+  "result": "FAIL",
+  "schema": "equal3.import-closure/1",
+  "violations": [
+    [
+      "import-cycle",
+      "anchor_wire commit_evidence_v0716 external_epoch_witness_v0719 runtime_gate_v0711 trust_rotation_v0718 writer_service_v0714",
+      "6 modules"
+    ],
+    [
+      "legacy-write-api",
+      "state_store",
+      "StateStore.apply"
+    ],
+    [
+      "legacy-write-api",
+      "state_store",
+      "StateStore.backup_verified"
+    ],
+    [
+      "legacy-write-api",
+      "state_store",
+      "StateStore.checkpoint"
+    ],
+    [
+      "legacy-write-api",
+      "state_store",
+      "StateStore.create"
+    ]
+  ]
+}

@@ -85,6 +85,23 @@ class Violations(TreeTest):
                 self.tree(**{'writer': 'import %s\n' % name, name: 'X = 1\n'})
                 self.assertEqual(self.violations(), [('legacy-module', name, self.violations()[0][2])])
 
+    def test_extra_forbidden_pattern_from_the_command_line(self):
+        # ADR-003 candidate: the lab anchor and provisioning must stay out of the writer closure
+        self.tree(writer='import anchor_lab\n', anchor_lab='X = 1\n')
+        self.assertEqual(self.run_main()[0], 0)
+        rc, out = self.run_main('--forbid', '*_lab')
+        self.assertEqual(rc, 1)
+        self.assertIn('VIOLATION legacy-module    anchor_lab (matches *_lab)', out)
+
+    def test_extra_forbidden_patterns_add_to_the_defaults(self):
+        self.tree(writer='import store_cli\nimport provision\n', store_cli='X = 1\n', provision='Y = 1\n')
+        out_json = self.dir / 'report.json'
+        rc, out = self.run_main('--forbid', 'provision', '--forbid', '*_lab', '--json', str(out_json))
+        self.assertEqual(rc, 1)
+        report = json.loads(out_json.read_text(encoding='utf-8'))
+        self.assertEqual(report['forbidden_modules'], list(cic.FORBIDDEN_MODULES) + ['provision', '*_lab'])
+        self.assertEqual(sorted(v[1] for v in report['violations']), ['provision', 'store_cli'])
+
     def test_import_inside_function_try_and_type_checking_counts(self):
         sources = ('def f():\n    import store_cli\n',
                    'try:\n    import store_cli\nexcept ImportError:\n    pass\n',
