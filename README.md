@@ -178,7 +178,7 @@ Recorded on 2026-10-26 when this repository was assembled (details in the commit
     10 modules, no legacy mutator, no cycle. v0.7.15 on the same tree keeps 5 violations.
   - An allowlist build cannot import any legacy module.
   - Answers and SQLite tables equal v0.7.15 on a differential sequence.
-  - 22 tests, 17 of 18 mutants killed
+  - 26 tests, 22 of 22 mutants killed
     ([verification/2026-11-26_engine-split](verification/2026-11-26_engine-split/README.md)).
   - A prototype next to the research tree: OS policy, an independent anchor and an external
     audit are open. No gate is closed.

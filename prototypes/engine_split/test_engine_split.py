@@ -153,6 +153,85 @@ class LegacyBypass(Tmp):
         _, fresh_cap = engine_mod.bind_writer(path, key=KEY, anchor=anchor)
         self.assertEqual(fresh_cap.commit(proposal).version, 1)   # positive control
 
+    def test_abort_between_intent_check_and_write_is_honoured(self):
+        # Review F2: the anchor is re-read inside the write transaction, so an ABORT that lands
+        # after the capability's first check (legal: the DB still shows NOT_COMMITTED_HOLD)
+        # stops the write instead of committing behind the anchor's back.
+        path = self.research_genesis()
+        engine, cap, anchor = self.candidate(path)
+        coord = c_coord.CoordinatedStore(engine, cap, anchor)
+        proposal, _ = engine.prepare_update(b'aborted meanwhile', request_id=rid(1))
+        f = engine.describe_proposal(proposal)
+        anchor.prepare(types_.Intent(f.store_id, 0, f.base_digest, 1, f.target_digest, f.request_id, f.proposal_hash))
+        before = tables(path)
+
+        def abort(point):
+            if point == 'after_preflight':
+                self.assertEqual(coord.diagnose().code, 'NOT_COMMITTED_HOLD')
+                pending = anchor.status().pending
+                coord.adjudicate('ABORT_NOT_COMMITTED',
+                                 anchor.test_only_review_token(pending, 'ABORT_NOT_COMMITTED'))
+        with self.assertRaisesRegex(types_.AnchorHold, 'anchor intent changed'):
+            cap.commit(proposal, fault=abort)
+        self.assertEqual(tables(path), before)
+        self.assertEqual(coord.diagnose().code, 'MATCH')
+
+    def test_a_concurrent_commit_of_the_same_intent_is_not_a_success(self):
+        # Review F3: a second capability (another anchor holding the same intent) commits first;
+        # the outer call then meets the replay path and must not report success.
+        path = self.research_genesis()
+        engine, cap, anchor = self.candidate(path)
+        proposal, _ = engine.prepare_update(b'twice', request_id=rid(1))
+        f = engine.describe_proposal(proposal)
+        intent = types_.Intent(f.store_id, 0, f.base_digest, 1, f.target_digest, f.request_id, f.proposal_hash)
+        anchor.prepare(intent)
+        twin = lab.MemoryCASAnchor(c_coord.position_for_genesis(engine), reviewer_key=REVIEWER)
+        twin.prepare(intent)
+        _, twin_cap = engine_mod.bind_writer(path, key=KEY, anchor=twin)
+
+        def race(point):
+            if point == 'after_preflight':
+                self.assertEqual(twin_cap.commit(proposal).version, 1)
+        with self.assertRaisesRegex(types_.AnchorHold, 'differs from the prepared anchor intent'):
+            cap.commit(proposal, fault=race)
+        self.assertEqual(engine.read().version, 1)   # written once, by the twin
+
+    def test_capability_checks_the_intent_base_against_the_anchor_position(self):
+        # Review F6: do not rely on the anchor's own prepare() check of the base.
+        path = self.research_genesis()
+        engine, _, _ = self.candidate(path)
+        proposal, _ = engine.prepare_update(b'x', request_id=rid(1))
+        f = engine.describe_proposal(proposal)
+        intent = types_.Intent(f.store_id, 0, f.base_digest, 1, f.target_digest, f.request_id, f.proposal_hash)
+
+        class LaxAnchor:   # an anchor that accepted an intent not based on its committed position
+            def status(self):
+                return types_.AnchorStatus(types_.Position(f.store_id, 0, 'ee' * 32), intent)
+        _, lax_cap = engine_mod.bind_writer(path, key=KEY, anchor=LaxAnchor())
+        before = tables(path)
+        with self.assertRaisesRegex(types_.AnchorHold, 'not based on the anchor position'):
+            lax_cap.commit(proposal)
+        self.assertEqual(tables(path), before)
+
+    def test_adjudicate_passes_evidence_to_the_anchor(self):
+        # Review F4: research CoordinatedStore.adjudicate forwards evidence (needed by the
+        # attested anchors of v0.7.16-v0.7.22); the candidate must too.
+        path = self.research_genesis()
+        engine, cap, anchor = self.candidate(path)
+        coord = c_coord.CoordinatedStore(engine, cap, anchor)
+        proposal, _ = engine.prepare_update(b'with evidence', request_id=rid(1))
+        coord.apply(proposal)
+        seen = {}
+        original = anchor.adjudicate
+
+        def recording(intent, decision, token, **kw):
+            seen.update(kw)
+            return original(intent, decision, token)
+        anchor.adjudicate = recording
+        token = anchor.test_only_review_token(anchor.status().pending, 'FINALIZE_COMMIT')
+        self.assertEqual(coord.adjudicate('FINALIZE_COMMIT', token, evidence={'obs': 1}).code, 'MATCH')
+        self.assertEqual(seen, {'evidence': {'obs': 1}})
+
     def test_capability_is_bound_to_its_engine_and_anchor(self):
         path = self.research_genesis()
         engine, cap, anchor = self.candidate(path)
@@ -208,11 +287,19 @@ class EngineSurface(Tmp):
         internal = {'_commit', '_key', '_engine', '_anchor', '_capability'}
         allowed = {'eq3_engine.py': {'_commit', '_key', '_engine', '_anchor'},
                    'eq3_coordinator.py': {'_capability'}}
+        # Review F1: whoever mints a capability chooses its anchor; minting happens only in the
+        # engine (definition) and in the composition root (the service).
+        minting = {'CommitCapability', 'bind_writer'}
+        mint_allowed = {'eq3_engine.py', 'eq3_writer_service.py'}
         for path in sorted(HERE.glob('eq3_*.py')):
-            used = {n.attr for n in ast.walk(ast.parse(path.read_text(encoding='utf-8')))
-                    if isinstance(n, ast.Attribute) and n.attr in internal}
+            tree = ast.parse(path.read_text(encoding='utf-8'))
+            used = {n.attr for n in ast.walk(tree) if isinstance(n, ast.Attribute) and n.attr in internal}
+            calls = {(n.func.id if isinstance(n.func, ast.Name) else getattr(n.func, 'attr', None))
+                     for n in ast.walk(tree) if isinstance(n, ast.Call)} & minting
             with self.subTest(module=path.name):
                 self.assertLessEqual(used, allowed.get(path.name, set()))
+                if path.name not in mint_allowed:
+                    self.assertEqual(calls, set())
 
 
 class Derivation(unittest.TestCase):

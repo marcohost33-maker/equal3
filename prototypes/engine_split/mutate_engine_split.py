@@ -9,15 +9,17 @@ outside EQUIVALENT was killed. Stdlib only, POSIX (symlinks).
 import json, os, shutil, subprocess, sys, tempfile
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
-# post-commit re-check: after the pre-commit comparison of every intent field, the CAS and the
-# chain-tail checks leave no state in which the committed receipt can differ (defence in depth)
-EQUIVALENT = {'M05 post-commit check off'}
+EQUIVALENT = set()
 M = [
  ('M01 no pending-intent check', 'eq3_engine.py', "        if pending is None:\n            raise AnchorHold('no prepared", "        if False:\n            raise AnchorHold('no prepared"),
  ('M02 intent comparison off', 'eq3_engine.py', "        if (pending.proposal_hash != facts.proposal_hash", "        if False and (pending.proposal_hash != facts.proposal_hash"),
  ('M03 target digest not compared', 'eq3_engine.py', "                or pending.digest != facts.target_digest):", "                ):"),
  ('M04 request id not compared', 'eq3_engine.py', "pending.request_id != facts.request_id", "False"),
- ('M05 post-commit check off', 'eq3_engine.py', "        if receipt.already_committed or receipt.digest.hex()", "        if False and receipt.already_committed or receipt.digest.hex()"),
+ ('M05 post-commit check off', 'eq3_engine.py', "        if receipt.already_committed or receipt.digest.hex() != pending.digest or receipt.version != pending.version:", "        if False:"),
+ ('M19 no re-check inside the write transaction', 'eq3_engine.py', "            if guard is not None:\n                guard()\n", ""),
+ ('M20 intent base not checked against the anchor position', 'eq3_engine.py', "            raise AnchorHold('prepared intent is not based on the anchor position; commit refused')", "            pass"),
+ ('M21 adjudicate drops evidence', 'eq3_coordinator.py', "            self.anchor.adjudicate(remote.pending, decision, token, evidence=evidence)", "            self.anchor.adjudicate(remote.pending, decision, token)"),
+ ('M22 coordinator mints its own capability', 'eq3_coordinator.py', "        self._capability = capability\n", "        self._capability = CommitCapability(engine, anchor)\n"),
  ('M06 public apply alias', 'eq3_engine.py', "    def verify(self):\n", "    def apply(self, proposal):\n        return self._commit(proposal)\n\n    def verify(self):\n"),
  ('M07 key as public attribute', 'eq3_engine.py', "        self._key = check_key(key)\n", "        self._key = check_key(key)\n        self.key = self._key\n"),
  ('M08 coordinator skips anchor prepare', 'eq3_coordinator.py', "        self.anchor.prepare(intent)\n", "        pass\n"),

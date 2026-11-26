@@ -104,7 +104,7 @@ class CoordinatedStore:
             raise AnchorHold('transaction may be pending; read-only diagnosis and independent review required') from exc
         return receipt
 
-    def adjudicate(self, decision: str, token: bytes) -> Assessment:
+    def adjudicate(self, decision: str, token: bytes, *, evidence=None) -> Assessment:
         remote = self.anchor.status()
         if remote.pending is None:
             raise ReviewDenied('nothing pending')
@@ -113,7 +113,10 @@ class CoordinatedStore:
                     'NOT_COMMITTED_HOLD' if decision == 'ABORT_NOT_COMMITTED' else None)
         if required is None or state.code != required:
             raise ReviewDenied('review decision inconsistent with verified SQLite state')
-        self.anchor.adjudicate(remote.pending, decision, token)
+        if evidence is None:
+            self.anchor.adjudicate(remote.pending, decision, token)
+        else:
+            self.anchor.adjudicate(remote.pending, decision, token, evidence=evidence)
         return self.diagnose()
 
 

@@ -1,8 +1,6 @@
 {
   "python": "3.13.18",
-  "equivalent": [
-    "M05 post-commit check off"
-  ],
+  "equivalent": [],
   "mutants": [
     {
       "mutant": "M01 no pending-intent check",
@@ -46,8 +44,38 @@
     },
     {
       "mutant": "M05 post-commit check off",
-      "killed": false,
-      "failing_tests": []
+      "killed": true,
+      "failing_tests": [
+        "test_a_concurrent_commit_of_the_same_intent_is_not_a_success"
+      ]
+    },
+    {
+      "mutant": "M19 no re-check inside the write transaction",
+      "killed": true,
+      "failing_tests": [
+        "test_abort_between_intent_check_and_write_is_honoured"
+      ]
+    },
+    {
+      "mutant": "M20 intent base not checked against the anchor position",
+      "killed": true,
+      "failing_tests": [
+        "test_capability_checks_the_intent_base_against_the_anchor_position"
+      ]
+    },
+    {
+      "mutant": "M21 adjudicate drops evidence",
+      "killed": true,
+      "failing_tests": [
+        "test_adjudicate_passes_evidence_to_the_anchor"
+      ]
+    },
+    {
+      "mutant": "M22 coordinator mints its own capability",
+      "killed": true,
+      "failing_tests": [
+        "test_engine_internals_are_used_only_inside_the_engine_module"
+      ]
     },
     {
       "mutant": "M06 public apply alias",
@@ -70,6 +98,7 @@
         "test_answers_and_tables_equal_research_v0715",
         "test_fault_matrix_matches_research",
         "test_fault_matrix_matches_research",
+        "test_adjudicate_passes_evidence_to_the_anchor",
         "test_research_reads_what_the_candidate_wrote_and_back",
         "test_tampered_history_is_refused",
         "test_handler_reaches_the_anchored_core_and_refuses_other_uids"

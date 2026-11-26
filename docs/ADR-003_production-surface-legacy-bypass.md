@@ -114,8 +114,14 @@ research tree. Measured in [verification/2026-11-26_engine-split](../verificatio
   plays the role of the legacy shim, unchanged.
 - **Item 2.** The write primitive is reachable only through `CommitCapability`. It commits only
   the proposal that the bound anchor holds as its PREPARED intent: proposal hash, request id,
-  store, base, base digest and target digest are compared before the write. This is stricter
-  than the ADR text, which only asked that the anchored writer construct the capability.
+  store, base, base digest and target digest are compared before the write.
+  - The intent's base must equal the anchor position.
+  - The anchor is re-read inside the write transaction, so an ABORT that lands in between
+    stops the write.
+  - This is stricter than the ADR text, which only asked that the anchored writer construct the
+    capability.
+  - Inside the process it is still a discipline: whoever mints a capability chooses its anchor.
+    An AST test pins minting to the engine and the composition root.
 - **Item 4.** The cycle is gone. `sqlite_wal_reset_safe` and the frame constants are leaves
   (`eq3_wal_gate`, `eq3_wire`), and the service no longer has an unanchored core.
 - **Acceptance test "import closure":** 0 violations for `eq3_writer_service` on the full tree,

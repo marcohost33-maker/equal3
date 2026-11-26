@@ -13,15 +13,19 @@ test_no_public_method_changes_the_database (prototypes.engine_split.test_engine_
 test_provisioning_is_not_reachable_from_the_engine_module (prototypes.engine_split.test_engine_split.EngineSurface.test_provisioning_is_not_reachable_from_the_engine_module) ... ok
 test_public_surface_is_the_reviewed_read_only_set (prototypes.engine_split.test_engine_split.EngineSurface.test_public_surface_is_the_reviewed_read_only_set) ... ok
 test_fault_matrix_matches_research (prototypes.engine_split.test_engine_split.Faults.test_fault_matrix_matches_research) ... ok
+test_a_concurrent_commit_of_the_same_intent_is_not_a_success (prototypes.engine_split.test_engine_split.LegacyBypass.test_a_concurrent_commit_of_the_same_intent_is_not_a_success) ... ok
+test_abort_between_intent_check_and_write_is_honoured (prototypes.engine_split.test_engine_split.LegacyBypass.test_abort_between_intent_check_and_write_is_honoured) ... ok
+test_adjudicate_passes_evidence_to_the_anchor (prototypes.engine_split.test_engine_split.LegacyBypass.test_adjudicate_passes_evidence_to_the_anchor) ... ok
 test_candidate_capability_refuses_a_proposal_other_than_the_prepared_one (prototypes.engine_split.test_engine_split.LegacyBypass.test_candidate_capability_refuses_a_proposal_other_than_the_prepared_one) ... ok
 test_candidate_capability_refuses_an_intent_with_any_field_that_does_not_fit (prototypes.engine_split.test_engine_split.LegacyBypass.test_candidate_capability_refuses_an_intent_with_any_field_that_does_not_fit) ... ok
 test_candidate_capability_refuses_without_prepared_intent (prototypes.engine_split.test_engine_split.LegacyBypass.test_candidate_capability_refuses_without_prepared_intent) ... ok
+test_capability_checks_the_intent_base_against_the_anchor_position (prototypes.engine_split.test_engine_split.LegacyBypass.test_capability_checks_the_intent_base_against_the_anchor_position) ... ok
 test_capability_is_bound_to_its_engine_and_anchor (prototypes.engine_split.test_engine_split.LegacyBypass.test_capability_is_bound_to_its_engine_and_anchor) ... ok
 test_research_store_writes_without_anchor_intent (prototypes.engine_split.test_engine_split.LegacyBypass.test_research_store_writes_without_anchor_intent) ... ok
 test_handler_reaches_the_anchored_core_and_refuses_other_uids (prototypes.engine_split.test_engine_split.Service.test_handler_reaches_the_anchored_core_and_refuses_other_uids) ... ok
 test_serve_holds_without_an_anchor (prototypes.engine_split.test_engine_split.Service.test_serve_holds_without_an_anchor) ... ok
 
 ----------------------------------------------------------------------
-Ran 22 tests in 1.326s
+Ran 26 tests in 1.499s
 
 OK

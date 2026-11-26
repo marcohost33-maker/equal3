@@ -377,10 +377,12 @@ class StateEngine:
             raise ReplayError('request ID reused with different proposal')
         return Receipt(request_id, r['base_version'], r['version'], bytes.fromhex(r['digest_sha256']), True)
 
-    def _commit(self, proposal: bytes, *, fault=None):
+    def _commit(self, proposal: bytes, *, guard=None, fault=None):
         """The CAS write primitive of StateStore.apply (v0.7.22), unchanged in substance.
 
         Private: the only caller is CommitCapability.commit after its anchor-intent check.
+        guard() runs inside the write transaction (after BEGIN IMMEDIATE, before any change)
+        and raises to refuse the write; the capability uses it to re-read the anchor.
         """
         sid, expected_version, rid, _, packet = _parse_proposal(proposal, key=self._key)
         proposal_hash = digest(proposal)
@@ -409,6 +411,8 @@ class StateEngine:
             if fault: fault('after_preflight')
             db.execute('BEGIN IMMEDIATE')
             started = True
+            if guard is not None:
+                guard()
             if db.execute('SELECT 1 FROM receipts WHERE request_id=?', (rid,)).fetchone():
                 db.execute('ROLLBACK'); started = False
                 return self._authenticated_replay(rid, proposal_hash)
@@ -488,9 +492,14 @@ class CommitCapability:
         return self._engine is engine and self._anchor is anchor
 
     def commit(self, proposal: bytes, *, fault=None) -> Receipt:
-        pending = self._anchor.status().pending
+        status = self._anchor.status()
+        pending = status.pending
         if pending is None:
             raise AnchorHold('no prepared anchor intent; commit refused')
+        committed = status.committed
+        if (pending.store_id != committed.store_id or pending.base_version != committed.version
+                or pending.base_digest != committed.digest):
+            raise AnchorHold('prepared intent is not based on the anchor position; commit refused')
         # Authenticates the proposal and decodes it against the verified head (reads only).
         facts = self._engine.describe_proposal(proposal)
         if (pending.proposal_hash != facts.proposal_hash or pending.request_id != facts.request_id
@@ -498,7 +507,14 @@ class CommitCapability:
                 or pending.base_digest != facts.base_digest or pending.version != facts.base_version + 1
                 or pending.digest != facts.target_digest):
             raise AnchorHold('proposal is not the prepared anchor intent; commit refused')
-        receipt = self._engine._commit(proposal, fault=fault)
+        def still_prepared():
+            # Re-read inside the write transaction: an ABORT or another transition that landed
+            # after the first check must stop the write. A remote anchor needs a lease or fence
+            # on the pending intent for this re-read to mean the same (roadmap P0-3).
+            now = self._anchor.status()
+            if now.pending != pending or now.committed != committed:
+                raise AnchorHold('anchor intent changed before the write; commit refused')
+        receipt = self._engine._commit(proposal, guard=still_prepared, fault=fault)
         if receipt.already_committed or receipt.digest.hex() != pending.digest or receipt.version != pending.version:
             raise AnchorHold('committed result differs from the prepared anchor intent')
         return receipt

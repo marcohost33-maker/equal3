@@ -16,11 +16,14 @@ All research versions keep the release decision **NO-GO**. Version history of th
   - Leaves `eq3_wal_gate` and `eq3_wire` remove the six-module cycle.
   - The writer entry point `eq3_writer_service` passes `check_import_closure.py` without a
     baseline: 10 modules, 0 violations. v0.7.15 on the same tree: 5.
-  - 22 tests: negative first against the v0.7.22 bypass; a differential against v0.7.15
+  - 26 tests: negative first against the v0.7.22 bypass; a differential against v0.7.15
     (answers and tables equal); fault points; compatibility in both directions; allowlist build
     with a PEP 578 witness and `ImportError` for legacy, lab and provisioning modules; the RPC
     handler; derivation pins.
-  - Mutation run: 17 of 18 killed, 1 equivalent.
+  - After an independent read-only review (F1-F6), the capability also re-reads the anchor
+    inside the write transaction, checks the intent base against the anchor position, and
+    `adjudicate` forwards `evidence`. Each fix has a test that was red before it.
+  - Mutation run: 22 of 22 killed.
   - Evidence: `verification/2026-11-26_engine-split/`. CI runs the tests and the full-tree
     closure in the non-root job.
 - `--forbid PATTERN` (repeatable) for `tools/check_import_closure.py` and

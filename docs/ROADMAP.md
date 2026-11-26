@@ -82,7 +82,8 @@ research record; that decision does not change the NO-GO status and does not cre
     - The commit is bound to the anchor's prepared intent, and the key is no longer an attribute.
     - An allowlist build (`DISTRIBUTION.txt`) cannot import any legacy module.
     - Behaviour equals v0.7.15 on a differential operation sequence and on two fault points.
-      Mutation run: 17 of 18 killed, 1 equivalent.
+      Mutation run: 22 of 22 killed, after an independent read-only review (F1-F6).
+    - The binding to the anchor is caller discipline inside the process, not a boundary.
     - Evidence: [verification/2026-11-26_engine-split](../verification/2026-11-26_engine-split/README.md).
     - Still open: OS policy for the writer UID (item 3, adversarial same-UID test), adoption in a
       research round with an external audit, and an independent anchor (P0-3). The gate

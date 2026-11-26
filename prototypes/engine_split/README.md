@@ -16,7 +16,7 @@ UID; see "Not shown" below.
 |---|---|---|
 | import closure of the writer entry point | 11 modules, **5 violations**: 4 legacy mutators via `state_store`, one cycle of 6 modules | 10 modules, **0 violations**, no baseline |
 | write without an anchor intent | `StateStore.apply(proposal)` commits; the anchor sees it only afterwards (`DIVERGENCE_HOLD`) | no public method writes; `CommitCapability.commit` refuses (`AnchorHold`) |
-| what the commit is bound to | a validly signed proposal | the anchor's PREPARED intent: proposal hash, request id, store, base, base digest, target digest |
+| what the commit is bound to | a validly signed proposal | the anchor's PREPARED intent: proposal hash, request id, store, base, base digest, target digest; the intent's base must equal the anchor position; the anchor is re-read inside the write transaction |
 | master key | public attribute `StateStore.key` | not an attribute; signing and authenticated decoding are engine methods |
 | unanchored service path | `WriterCore` behind `_research_unanchored=True` | none; `serve()` HOLDs unless an anchor object is passed |
 | allowlist build | – | `DISTRIBUTION.txt`: 10 files; `state_store`, `anchor_protocol`, `anchor_wire`, `writer_service_v0714`, `store_cli`, the lab anchor and provisioning raise `ImportError` from it |
@@ -45,13 +45,20 @@ are leaves.
 ## Tests
 
 ```sh
-python -B -W error::ResourceWarning -m unittest -v prototypes/engine_split/test_engine_split.py   # 22 tests
-python prototypes/engine_split/mutate_engine_split.py                                             # 18 hand mutants
+python -B -W error::ResourceWarning -m unittest -v prototypes/engine_split/test_engine_split.py   # 26 tests
+python prototypes/engine_split/mutate_engine_split.py                                             # 22 hand mutants
 ```
 
-- **LegacyBypass** (negative first): v0.7.22 commits without an anchor intent; the candidate
-  refuses without an intent, for a different proposal, and for an intent whose digest, request
-  id or proposal hash does not fit, each before anything is written.
+- **LegacyBypass** (negative first): v0.7.22 commits without an anchor intent. The candidate
+  refuses, each time before anything is written:
+  - without an intent;
+  - for a different proposal;
+  - for an intent whose digest, request id or proposal hash does not fit;
+  - for an intent not based on the anchor position;
+  - when an ABORT lands between the intent check and the write.
+
+  A second capability that commits the same intent first does not let the outer call report
+  success, and `adjudicate` forwards `evidence`, as research does for the attested anchors.
 - **EngineSurface**: the public surface is a reviewed read-only set; calling every public method
   leaves the database file byte-identical; the write primitive and the key are used only inside
   `eq3_engine` (AST check over the candidate sources).
@@ -72,17 +79,31 @@ python prototypes/engine_split/mutate_engine_split.py                           
 - **Derivation**: the WAL gate equals the research function on 192 versions; the runtime gate is
   the research file with one import changed.
 
-Mutation run: 17 of 18 killed. The survivor is the post-commit re-check in
-`CommitCapability.commit`. Every intent field is compared before the write, and the CAS and
-chain-tail checks leave no state in which the committed receipt could differ. It is kept as
-defence in depth and recorded as equivalent.
+Mutation run: **22 of 22 killed**. An independent read-only review of the first version
+(2026-11-26) found five issues, and each now has a test that was red before its fix:
+- an ABORT racing the write (F2);
+- a mislabelled mutant M05 that was not equivalent (F3);
+- `evidence` dropped by `adjudicate` (F4);
+- an intent base not checked against the anchor position (F6);
+- capability minting not pinned (F1).
 
 ## Not shown (scope)
 
-- **Not a boundary inside the process.** Python lets same-process code reach `engine._commit`
-  or `engine._key`. The capability is a discipline: the static closure check enforces no
-  introspection and no dynamic imports, and a test pins which modules use the internals. The
-  boundary stays the OS: separate writer UID, key and DB 0600 (ADR-003 item 3).
+- **Not a boundary inside the process.** Same-process code can reach `engine._commit` or
+  `engine._key`. It can also mint `CommitCapability(engine, fake_anchor)` with an anchor that
+  reports whatever intent it likes, because the binding is only as good as the anchor object
+  passed in.
+  - The capability is a discipline, not an enforcement. The static closure check forbids
+    introspection and dynamic imports, and an AST test pins which modules use the internals and
+    where capabilities are minted (engine and composition root only).
+  - The boundary stays the OS: a separate writer UID, key and DB 0600 (ADR-003 item 3), plus an
+    authenticated anchor (P0-3).
+- The in-transaction re-read of the anchor is meaningful only for an anchor whose pending intent
+  cannot change between that read and the commit. A remote anchor needs a lease or fence on the
+  intent (P0-3).
+- "0 violations" in the closure check means no legacy module, no `StateStore` mutator and no
+  cycle. The tool's legacy-API table names `StateStore` only. That `StateEngine` has no public
+  mutator is shown by `EngineSurface`, not by the closure check.
 - **ADR-003 item 3 is not implemented.** The adversarial same-UID test (systemd unit with
   `NoNewPrivileges` / `ProtectSystem`, no other code as the writer UID) needs a host with systemd.
 - **No independent anchor.** The lab anchor is the v0.7.5 in-process test double. NR-01 (joint
