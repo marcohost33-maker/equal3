@@ -10,12 +10,12 @@
     "eq3_anchored_writer",
     "eq3_coordinator",
     "eq3_engine",
+    "eq3_runtime_evidence",
     "eq3_runtime_gate",
     "eq3_wal_gate",
     "eq3_wire",
     "eq3_writer_service",
-    "equal3",
-    "runtime_evidence_v0710"
+    "equal3"
   ],
   "result": "PASS",
   "schema": "equal3.runtime-import-witness/1",
@@ -24,12 +24,12 @@
     "eq3_anchored_writer",
     "eq3_coordinator",
     "eq3_engine",
+    "eq3_runtime_evidence",
     "eq3_runtime_gate",
     "eq3_wal_gate",
     "eq3_wire",
     "eq3_writer_service",
-    "equal3",
-    "runtime_evidence_v0710"
+    "equal3"
   ],
   "violations": []
 }

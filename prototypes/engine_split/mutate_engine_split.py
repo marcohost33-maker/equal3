@@ -12,9 +12,10 @@ ROOT = Path(__file__).resolve().parents[2]
 EQUIVALENT = set()
 M = [
  ('M01 no pending-intent check', 'eq3_engine.py', "        if pending is None:\n            raise AnchorHold('no prepared", "        if False:\n            raise AnchorHold('no prepared"),
- ('M02 intent comparison off', 'eq3_engine.py', "        if (pending.proposal_hash != facts.proposal_hash", "        if False and (pending.proposal_hash != facts.proposal_hash"),
- ('M03 target digest not compared', 'eq3_engine.py', "                or pending.digest != facts.target_digest):", "                ):"),
- ('M04 request id not compared', 'eq3_engine.py', "pending.request_id != facts.request_id", "False"),
+ ('M02 intent comparison off', 'eq3_engine.py', "        if (pending.proposal_hash != digest(proposal).hex()", "        if False and (pending.proposal_hash != digest(proposal).hex()"),
+ ('M23 in-transaction intent comparison off', 'eq3_engine.py', "            if expect is not None and (expect.base_version", "            if False and (expect.base_version"),
+ ('M03 target digest not compared', 'eq3_engine.py', "                                       or expect.digest != target_digest.hex()):", "                                       ):"),
+ ('M04 request id not compared', 'eq3_engine.py', "pending.request_id != rid.hex()", "False"),
  ('M05 post-commit check off', 'eq3_engine.py', "        if receipt.already_committed or receipt.digest.hex() != pending.digest or receipt.version != pending.version:", "        if False:"),
  ('M19 no re-check inside the write transaction', 'eq3_engine.py', "            if guard is not None:\n                guard()\n", ""),
  ('M20 intent base not checked against the anchor position', 'eq3_engine.py', "            raise AnchorHold('prepared intent is not based on the anchor position; commit refused')", "            pass"),
@@ -31,7 +32,9 @@ M = [
  ('M14 runtime approval window', 'eq3_runtime_gate.py', "30*86400", "31*86400"),
  ('M15 wire imports the service (cycle)', 'eq3_wire.py', "from eq3_engine import MAX_STORED_STATE\n", "from eq3_engine import MAX_STORED_STATE\nimport eq3_writer_service\n"),
  ('M16 writer imports state_store', 'eq3_anchored_writer.py', "import secrets\n", "import secrets\nimport state_store\n"),
- ('M18 proposal hash not compared', 'eq3_engine.py', "pending.proposal_hash != facts.proposal_hash or ", ""),
+ ('M18 proposal hash not compared', 'eq3_engine.py', "pending.proposal_hash != digest(proposal).hex() or ", ""),
+ ('M24 built-in _sqlite3 not classified', 'eq3_runtime_evidence.py', "    extension_file=getattr(_sqlite3,'__file__',None)", "    extension_file=_sqlite3.__file__"),
+ ('M25 coordinator ignores the anchor intent when diagnosing commit', 'eq3_coordinator.py', "                safe_equal(receipt['proposal_hash'], p.proposal_hash)):", "                True):"),
  ('M17 writer core trusts unbound capability', 'eq3_anchored_writer.py', "        except AnchorHold as exc:\n            raise WriterError('commit capability", "        except ZeroDivisionError as exc:\n            raise WriterError('commit capability"),
 ]
 results = []

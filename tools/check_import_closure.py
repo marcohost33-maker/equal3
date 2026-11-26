@@ -84,7 +84,9 @@ from typing import Dict, Iterable, List, Sequence, Set, Tuple
 RESEARCH = Path(__file__).resolve().parent.parent / 'research'
 DEFAULT_ENTRIES = ('anchored_writer_v0715',)
 FORBIDDEN_MODULES = ('legacy_state_store', 'store_cli', 'guarded_store', 'run_*', 'bench*', 'test_*')
-LEGACY_WRITE_API = {'StateStore': ('create', 'apply', 'checkpoint', 'backup_verified')}
+LEGACY_WRITE_API = {'StateStore': ('create', 'apply', 'checkpoint', 'backup_verified'),
+                    # ADR-003 candidate engine (prototypes/engine_split): held to the same rule
+                    'StateEngine': ('create', 'apply', 'checkpoint', 'backup_verified')}
 DYNAMIC_IMPORT_NAMES = {'__import__', 'import_module'}
 # Fail-closed rule (E3-V1): the import machinery may appear only inside a direct call with one
 # string literal. Every other mention fails, instead of listing the ways it can be reached.

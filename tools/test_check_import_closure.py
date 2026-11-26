@@ -85,6 +85,16 @@ class Violations(TreeTest):
                 self.tree(**{'writer': 'import %s\n' % name, name: 'X = 1\n'})
                 self.assertEqual(self.violations(), [('legacy-module', name, self.violations()[0][2])])
 
+    def test_engine_class_of_the_adr003_candidate_is_held_to_the_same_rule(self):
+        # review F5: "0 violations" must also mean no legacy-named public mutator on StateEngine
+        for method in ('create', 'apply', 'checkpoint', 'backup_verified'):
+            with self.subTest(method=method):
+                self.tree(writer='import eq3_engine\n',
+                          eq3_engine='class StateEngine:\n    def %s(self):\n        pass\n' % method)
+                self.assertEqual(self.violations(), [('legacy-write-api', 'eq3_engine', 'StateEngine.%s' % method)])
+        self.tree(writer='import eq3_engine\n', eq3_engine='class StateEngine:\n    def _commit(self):\n        pass\n')
+        self.assertEqual(self.violations(), [])
+
     def test_extra_forbidden_pattern_from_the_command_line(self):
         # ADR-003 candidate: the lab anchor and provisioning must stay out of the writer closure
         self.tree(writer='import anchor_lab\n', anchor_lab='X = 1\n')

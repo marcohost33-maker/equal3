@@ -11,8 +11,11 @@ locked 46.0.4), run as root. Same maintenance channel; not an independent review
 | `closure_candidate.json` | `check_import_closure.py` on a flat copy of `research/*.py` + `eq3_*.py`, entry `eq3_writer_service`, `--forbid '*_lab' --forbid eq3_provision` | **PASS, 0 violations**, closure of 10 modules |
 | `closure_v0715_same_tree.json` | same tree and options, entry `anchored_writer_v0715` (negative control) | FAIL, 5 violations (as in the 2026-11-18 baseline) |
 | `runtime_witness_distribution.json` | `runtime_import_witness.py --deny` on the allowlist build (`DISTRIBUTION.txt`, 10 files) | PASS; the run loaded exactly the 10 modules of the static closure |
-| `test_engine_split.log` | `python -B -W error::ResourceWarning -m unittest -v prototypes/engine_split/test_engine_split.py` | 26 tests OK |
-| `mutants.json` | `prototypes/engine_split/mutate_engine_split.py` | 22 of 22 killed |
+| `test_engine_split.log` | `python -B -W error::ResourceWarning -m unittest -v prototypes/engine_split/test_engine_split.py` (root, cryptography 50.0.1) | 32 tests OK, 0 skipped |
+| `test_engine_split_root_crypto4604.log` | the same in a venv from `tools/requirements-ci.lock` (`--require-hashes`, cryptography 46.0.4), root, staged tree (CI root lane emulated) | 32 OK, 0 skipped |
+| `test_engine_split_uid65534_crypto4604.log` | the same as UID 65534 (CI non-root lane emulated) | 32 OK, 1 skipped (the root-only boundary test) |
+| `mutants.json` | `prototypes/engine_split/mutate_engine_split.py` | 25 of 25 killed |
+| `bench_set_cost.json` | `prototypes/engine_split/bench_engine_split.py --repeat 9` (exploratory, one host, median) | 9 full-history verifications per SET + FINALIZE in both; candidate/research wall clock 1.01 / 1.04 / 1.00 at 0 / 200 / 1000 commits |
 
 Reproduce from the repository root:
 
@@ -54,6 +57,23 @@ format match `research/state_store.py` without a weaker check. The only differen
 are the removed v1/WAL paths and fault points, and the chain-tail check moved earlier inside
 the same `BEGIN IMMEDIATE`.
 
+## Second self-check pass (after the review)
+
+Re-checked the delivered state instead of trusting it. Measured, validated or falsified:
+
+| # | blind spot | evidence | result |
+|---|---|---|---|
+| S1 | cost of the split was never measured | `bench_set_cost.json`; first run: **10 vs 9** full-history verifications, ratio 1.35 at 1000 commits | fixed: the capability no longer calls `describe_proposal`; base and target digest are compared **inside** `_commit`'s write transaction on the values it writes (also removes a check-then-write window, the storage-side fence check Kleppmann describes). Now 9 vs 9, ratio about 1.0. New mutant M23 |
+| S2 | "works with the v0.7.16+ attested anchors" was assumed after F4 (stub test only) | new `ResearchAnchors` test against `PersistentCASAnchor` and `EvidenceRequiredCASAnchor` with a real signed observation | **validated**: equal answers and tables; FINALIZE without evidence refused in both |
+| S3 | the built-in `_sqlite3` errors were set aside as "environment" | python-build-standalone links SQLite statically (its technical notes), so it is a real deployment shape | fixed in the candidate (`eq3_runtime_evidence`): classified HOLD; negative-first test red on research; mutant M24 |
+| S4 | root separate-UID test not ported | `RootBoundary` test; CI root lane step without skips | **added**; ran as root here |
+| S5 | closure "0 violations" did not cover a `StateEngine` mutator (F5) | 1 tool test, red before (4 failing cases) | fixed: the tool table covers `StateEngine`; the baseline still matches |
+| S6 | mutant M25 (coordinator ignores the proposal hash in diagnosis) survived | conflict scenario via the `fast` codec strategy | **test added**; both say `CONFLICT_HOLD`; M25 killed |
+| S7 | PR #3 and PR #4 could conflict | `git merge-tree` | clean |
+| S8 | the WAL gate thresholds could be outdated | sqlite.org news: fix in 3.51.3, backports 3.50.7 and 3.44.6, 3.52.0 withdrawn | **validated**, gate unchanged |
+| S9 | CI could not run | both lanes emulated: hash-locked venv, root and UID 65534 | green; the real CI run is still open |
+| S10 | the CI root-lane step was first written with `PIPESTATUS` under `sh` and an absolute unittest path | review of my own YAML | rewritten before it ran: `cd` plus a relative path, explicit exit codes |
+
 ## Research suite in this container (environment finding)
 
 `tools/run_test_groups.py --expect-total 430` as root, research tree unchanged:
@@ -65,8 +85,8 @@ the same `BEGIN IMMEDIATE`.
 - The gate still fails closed: no approval results. But the exception is not the classified
   `RuntimeEvidenceError` that `runtime_gate_v0711` catches.
 - CI (setup-python 3.13, extension module) is green on the identical `research/` tree.
-- Recorded as a P3 portability note for the next research round. The candidate copies the
-  runtime gate unchanged and inherits the same behaviour.
+- The research module stays unchanged (rule 1). The candidate's `eq3_runtime_evidence` classifies
+  the case as a HOLD (S3). The research fix belongs in the next research round.
 
 `tools/test_check_sqlite_runtime.py::test_real_child_without_uid_drop` fails here before and after
 the change (no separately mapped libsqlite3; already noted on 2026-11-18); it passes in CI.

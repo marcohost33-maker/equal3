@@ -4,7 +4,7 @@
 # import closure of eq3_writer_service is clean without a baseline, and that no legacy,
 # lab or provisioning module can be imported from it.
 # Not listed on purpose: eq3_anchor_lab.py (volatile test double), eq3_provision.py (genesis
-# creation, an administrative step), every research/ module except the two leaves below.
+# creation, an administrative step), every research/ module except the codec equal3.py below.
 prototypes/engine_split/eq3_writer_service.py
 prototypes/engine_split/eq3_anchored_writer.py
 prototypes/engine_split/eq3_coordinator.py
@@ -13,5 +13,5 @@ prototypes/engine_split/eq3_anchor_types.py
 prototypes/engine_split/eq3_runtime_gate.py
 prototypes/engine_split/eq3_wal_gate.py
 prototypes/engine_split/eq3_wire.py
+prototypes/engine_split/eq3_runtime_evidence.py
 research/equal3.py
-research/runtime_evidence_v0710.py

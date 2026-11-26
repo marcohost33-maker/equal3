@@ -17,9 +17,17 @@
         "test_candidate_capability_refuses_a_proposal_other_than_the_prepared_one",
         "test_candidate_capability_refuses_an_intent_with_any_field_that_does_not_fit",
         "test_candidate_capability_refuses_an_intent_with_any_field_that_does_not_fit",
+        "test_candidate_capability_refuses_a_proposal_other_than_the_prepared_one",
+        "test_candidate_capability_refuses_an_intent_with_any_field_that_does_not_fit"
+      ]
+    },
+    {
+      "mutant": "M23 in-transaction intent comparison off",
+      "killed": true,
+      "failing_tests": [
         "test_candidate_capability_refuses_an_intent_with_any_field_that_does_not_fit",
-        "test_candidate_capability_refuses_a_proposal_other_than_the_prepared_one",
-        "test_candidate_capability_refuses_a_proposal_other_than_the_prepared_one",
+        "test_candidate_capability_refuses_an_intent_with_any_field_that_does_not_fit",
+        "test_candidate_capability_refuses_an_intent_with_any_field_that_does_not_fit",
         "test_candidate_capability_refuses_an_intent_with_any_field_that_does_not_fit"
       ]
     },
@@ -67,6 +75,7 @@
       "mutant": "M21 adjudicate drops evidence",
       "killed": true,
       "failing_tests": [
+        "test_persistent_and_attested_anchors_match_research",
         "test_adjudicate_passes_evidence_to_the_anchor"
       ]
     },
@@ -81,6 +90,10 @@
       "mutant": "M06 public apply alias",
       "killed": true,
       "failing_tests": [
+        "test_allowlist_is_complete_and_excludes_lab_and_provisioning",
+        "1 violation",
+        "test_closure_over_the_full_tree_is_clean_without_baseline",
+        "1 violation",
         "test_public_surface_is_the_reviewed_read_only_set"
       ]
     },
@@ -98,9 +111,13 @@
         "test_answers_and_tables_equal_research_v0715",
         "test_fault_matrix_matches_research",
         "test_fault_matrix_matches_research",
+        "test_same_target_committed_by_another_proposal_is_a_conflict_not_a_commit",
         "test_adjudicate_passes_evidence_to_the_anchor",
+        "test_persistent_and_attested_anchors_match_research",
+        "test_persistent_and_attested_anchors_match_research",
         "test_research_reads_what_the_candidate_wrote_and_back",
         "test_tampered_history_is_refused",
+        "test_real_separate_uid_client_against_the_candidate_service",
         "test_handler_reaches_the_anchored_core_and_refuses_other_uids"
       ]
     },
@@ -129,6 +146,7 @@
       "mutant": "M12 handler ignores peer UID",
       "killed": true,
       "failing_tests": [
+        "test_real_separate_uid_client_against_the_candidate_service",
         "test_handler_reaches_the_anchored_core_and_refuses_other_uids"
       ]
     },
@@ -143,7 +161,7 @@
       "mutant": "M14 runtime approval window",
       "killed": true,
       "failing_tests": [
-        "test_runtime_gate_is_the_research_file_with_one_import_changed"
+        "test_runtime_gate_is_the_research_file_with_two_imports_changed"
       ]
     },
     {
@@ -170,6 +188,20 @@
       "failing_tests": [
         "test_candidate_capability_refuses_an_intent_with_any_field_that_does_not_fit",
         "test_candidate_capability_refuses_an_intent_with_any_field_that_does_not_fit"
+      ]
+    },
+    {
+      "mutant": "M24 built-in _sqlite3 not classified",
+      "killed": true,
+      "failing_tests": [
+        "test_candidate_inventory_reports_built_in_and_the_gate_holds_classified"
+      ]
+    },
+    {
+      "mutant": "M25 coordinator ignores the anchor intent when diagnosing commit",
+      "killed": true,
+      "failing_tests": [
+        "test_same_target_committed_by_another_proposal_is_a_conflict_not_a_commit"
       ]
     },
     {

@@ -313,14 +313,67 @@ class Derivation(unittest.TestCase):
             self.assertIs(eq3_wal_gate.sqlite_wal_reset_safe(v), anchor_wire.sqlite_wal_reset_safe(v), v)
         self.assertIs(eq3_wal_gate.sqlite_wal_reset_safe(), anchor_wire.sqlite_wal_reset_safe())
 
-    def test_runtime_gate_is_the_research_file_with_one_import_changed(self):
+    def test_runtime_gate_is_the_research_file_with_two_imports_changed(self):
         original = (RESEARCH / 'runtime_gate_v0711.py').read_text(encoding='utf-8')
         copy = (HERE / 'eq3_runtime_gate.py').read_text(encoding='utf-8')
         body = copy.split('The text below is the original module docstring.\n\n', 1)[1]
-        self.assertEqual(body.replace('from eq3_wal_gate import sqlite_wal_reset_safe',
-                                      'from anchor_wire import sqlite_wal_reset_safe'),
-                         original[len('"""'):])
+        body = body.replace('from eq3_wal_gate import sqlite_wal_reset_safe',
+                            'from anchor_wire import sqlite_wal_reset_safe')
+        body = body.replace('from eq3_runtime_evidence import RuntimeEvidenceError, runtime_inventory',
+                            'from runtime_evidence_v0710 import RuntimeEvidenceError, runtime_inventory')
+        self.assertEqual(body, original[len('"""'):])
         self.assertTrue(copy.startswith('"""ADR-003 candidate'))
+
+    def test_runtime_evidence_differs_from_research_only_in_the_built_in_case(self):
+        import difflib
+        original = (RESEARCH / 'runtime_evidence_v0710.py').read_text(encoding='utf-8')
+        copy = (HERE / 'eq3_runtime_evidence.py').read_text(encoding='utf-8')
+        body = '"""' + copy.split('The text below is the original module docstring.\n\n', 1)[1]
+        changed = [l for l in difflib.unified_diff(original.splitlines(), body.splitlines(), lineterm='', n=0)
+                   if l[:1] in '+-' and not l.startswith(('+++', '---'))]
+        self.assertEqual(len(changed), 11, changed)   # 3 lines out, 8 lines in (pinned)
+        self.assertTrue(all('extension' in l or 'built' in l or 'statically' in l or 'return evidence' in l
+                            for l in changed), changed)
+
+
+class RuntimeEvidence(unittest.TestCase):
+    """A built-in _sqlite3 (static SQLite, e.g. python-build-standalone) must HOLD, classified."""
+
+    def test_research_inventory_raises_an_unclassified_error_on_a_built_in_sqlite3(self):
+        import types
+        from unittest import mock
+        import runtime_evidence_v0710 as research_evidence
+        with mock.patch.object(research_evidence, '_sqlite3', types.SimpleNamespace()):
+            with self.assertRaises(AttributeError):        # negative first: not RuntimeEvidenceError
+                research_evidence.runtime_inventory()
+
+    def test_candidate_inventory_reports_built_in_and_the_gate_holds_classified(self):
+        import types
+        from unittest import mock
+        import eq3_runtime_evidence as evidence
+        import eq3_runtime_gate as gate
+        with mock.patch.object(evidence, '_sqlite3', types.SimpleNamespace()):
+            facts = evidence.runtime_inventory()
+            self.assertEqual((facts['python_extension'], facts['mapped_file_identity_consistent']),
+                             ('built-in', False))
+            self.assertIn('statically', facts['loaded_library_error'])
+            try:
+                from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+            except ImportError:
+                self.skipTest('cryptography not installed')
+            import time as _time
+            now = int(_time.time())
+            policy = json.dumps({'schema': gate.SCHEMA, 'purpose': gate.PURPOSE, 'deployment_id': 'lab',
+                                 'sqlite_version': facts['sqlite_version'],
+                                 'sqlite_source_id': facts['sqlite_source_id'],
+                                 'loaded_library_sha256': '0' * 64,
+                                 'python_abi': '%d.%d' % sys.version_info[:2], 'machine': 'x',
+                                 'not_before': now - 10, 'expires_at': now + 3600}).encode()
+            signer = Ed25519PrivateKey.generate()
+            from cryptography.hazmat.primitives import serialization
+            public = signer.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
+            with self.assertRaisesRegex(evidence.RuntimeEvidenceError, 'does not match executing SQLite runtime'):
+                gate.verify_signed_runtime_policy(policy, signer.sign(policy), public, deployment_id='lab')
 
 
 class Differential(Tmp):
@@ -412,6 +465,43 @@ class Faults(Tmp):
                 self.assertEqual(candidate[1], 'MATCH')
                 # store ids differ (two genesis files); the shape of the history must not
                 self.assertEqual([len(candidate[2][t]) for t in TABLES], [len(research[2][t]) for t in TABLES])
+
+
+    def test_same_target_committed_by_another_proposal_is_a_conflict_not_a_commit(self):
+        # Mutant M25: the anchor PREPARED proposal A; a legacy writer (same key and UID, the
+        # bypass ADR-003 item 3 must close) commits proposal B for the same request id and the
+        # same target through another codec strategy. Digest and version match the intent, the
+        # proposal hash does not: both implementations must say CONFLICT_HOLD and refuse FINALIZE.
+        def run(candidate):
+            path = self.research_genesis('conflict-%s.sqlite' % candidate)
+            legacy = r_store.StateStore(path, key=KEY, journal_mode='DELETE')
+            target = b'x' * 250 + b'y' * 60
+            if candidate:
+                engine, cap, anchor = self.candidate(path)
+                coord = c_coord.CoordinatedStore(engine, cap, anchor)
+                proposal, _ = engine.prepare_update(target, request_id=rid(5))
+                hold, denied = types_.AnchorHold, types_.ReviewDenied
+            else:
+                anchor = r_anchor.MemoryCASAnchor(r_anchor.position_for_genesis(legacy), reviewer_key=REVIEWER)
+                coord = r_anchor.CoordinatedStore(legacy, anchor)
+                proposal, _ = r_store.prepare_update(legacy, target, request_id=rid(5))
+                hold, denied = r_anchor.AnchorHold, r_anchor.ReviewDenied
+
+            def stop(point):
+                if point == 'after_anchor_prepare':
+                    raise OSError('crash after prepare')
+            with self.assertRaises(hold):
+                coord.apply(proposal, fault=stop)
+            other, _ = r_store.prepare_update(legacy, target, request_id=rid(5), strategy='fast')
+            self.assertNotEqual(other, proposal)
+            legacy.apply(other)                         # the bypass
+            code = coord.diagnose().code
+            pending = anchor.status().pending
+            with self.assertRaises(denied):
+                coord.adjudicate('FINALIZE_COMMIT', anchor.test_only_review_token(pending, 'FINALIZE_COMMIT'))
+            return code
+        self.assertEqual(run(False), 'CONFLICT_HOLD')
+        self.assertEqual(run(True), 'CONFLICT_HOLD')
 
 
 class Compatibility(Tmp):
@@ -533,6 +623,150 @@ class Distribution(Tmp):
                            capture_output=True, text=True, timeout=60, cwd=str(staged.parent))
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertEqual(json.loads(r.stdout), {n: 'ImportError' for n in names})
+
+
+class ResearchAnchors(Tmp):
+    """The candidate drives the persistent (v0.7.7+) and attested (v0.7.16+) research anchors."""
+
+    def run(self, result=None):
+        try:
+            import cryptography  # noqa: F401
+        except ImportError:
+            self.skipTest('cryptography not installed')
+        return super().run(result)
+
+    def anchors(self, kind, position, tag):
+        import anchor_wire
+        seal = b'S' * 32
+        if kind == 'persistent':
+            return anchor_wire.PersistentCASAnchor.bootstrap(self.dir / ('a-%s.sqlite' % tag), position,
+                                                             reviewer_key=REVIEWER, seal_key=seal), None
+        import commit_evidence_v0716 as ce
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+        if not hasattr(self, '_attester'):
+            self._attester = Ed25519PrivateKey.generate()
+        anchor = ce.EvidenceRequiredCASAnchor.bootstrap(
+            self.dir / ('a-%s.sqlite' % tag), position, reviewer_key=REVIEWER, seal_key=seal,
+            attester_public_key=self._attester.public_key(), deployment_id='equal3-lab-0716')
+        return anchor, self._attester
+
+    def drive(self, kind, impl):
+        import anchor_protocol
+        import commit_evidence_v0716 as ce
+        genesis = self.dir / ('%s-%s.sqlite' % (kind, impl))
+        shutil.copyfile(self.genesis, genesis)
+        if impl == 'research':
+            store = r_store.StateStore(genesis, key=KEY, journal_mode='DELETE')
+            anchor, attester = self.anchors(kind, r_anchor.position_for_genesis(store), kind + '-' + impl)
+            core = r_writer.AnchoredWriterCore(store, anchor)
+            observed = store
+        else:
+            engine = engine_mod.StateEngine(genesis, key=KEY)
+            anchor, attester = self.anchors(kind, c_coord.position_for_genesis(engine), kind + '-' + impl)
+            engine, cap = engine_mod.bind_writer(genesis, key=KEY, anchor=anchor)
+            core = c_writer.AnchoredWriterCore(engine, cap, anchor)
+            # the observer reads with the research store: independent code path, read only
+            observed = r_store.StateStore(genesis, key=KEY, journal_mode='DELETE')
+        out = []
+        for n, body in ((1, b'first'), (2, b'second' * 30)):
+            out.append(core.dispatch(wire.SET, rid(n), body))
+            pending = anchor.status().pending
+            import hmac as _hmac
+            token = _hmac.new(REVIEWER, anchor_protocol._review_message(pending, 'FINALIZE_COMMIT'),
+                              hashlib.sha256).digest()
+            if attester is not None:
+                with self.assertRaises(anchor_protocol.ReviewDenied):   # evidence is mandatory
+                    core._coordinator.adjudicate('FINALIZE_COMMIT', token)
+                evidence = ce.issue_observation(store=observed, anchor=anchor, intent=pending,
+                                                decision='FINALIZE_COMMIT', deployment_id='equal3-lab-0716',
+                                                signing_key=attester)
+                out.append(core._coordinator.adjudicate('FINALIZE_COMMIT', token, evidence=evidence).code)
+            else:
+                out.append(core._coordinator.adjudicate('FINALIZE_COMMIT', token).code)
+        out.append(core.dispatch(wire.STATUS, wire.ZERO_REQUEST, b''))
+        return out, tables(genesis)
+
+    def test_persistent_and_attested_anchors_match_research(self):
+        self.genesis = self.research_genesis('genesis.sqlite')
+        for kind in ('persistent', 'attested'):
+            with self.subTest(anchor=kind):
+                research = self.drive(kind, 'research')
+                candidate = self.drive(kind, 'candidate')
+                self.assertEqual(candidate, research)
+                self.assertEqual(candidate[0][-1]['version'], 2)
+
+
+class RootBoundary(Tmp):
+    """Port of test_writer_service_v0714.test_real_linux_uid_boundary_separate_client (root only)."""
+
+    def test_real_separate_uid_client_against_the_candidate_service(self):
+        if os.geteuid() != 0 or sys.platform != 'linux':
+            self.skipTest('requires Linux root for the separate-UID test')
+        import time as _time
+        from unittest import mock
+        writer, unauth = 65534, 65533
+        self.dir.chmod(0o711)
+        priv = self.dir / 'private'; priv.mkdir(); priv.chmod(0o700)
+        db = priv / 'db.sqlite'
+        r_store.StateStore.create(db, key=KEY, initial=b'original', journal_mode='DELETE')
+        key = priv / 'secret'; key.write_bytes(KEY); key.chmod(0o600)
+        for name, data in (('gate', b'gate'), ('sig', b'sign')):
+            (self.dir / name).write_bytes(data)
+        pub = self.dir / 'pub'; pub.write_bytes(b'\x22' * 32); pub.chmod(0o644)
+        shared = self.dir / 'shared'; shared.mkdir(); os.chown(shared, 0, writer); shared.chmod(0o710)
+        sock = shared / 's.sock'
+        engine = engine_mod.StateEngine(db, key=KEY)
+        anchor = lab.MemoryCASAnchor(c_coord.position_for_genesis(engine), reviewer_key=REVIEWER)
+        status, stop = {'error': None}, threading.Event()
+
+        def run_service():
+            try:
+                service.serve(sock, database_path=db, key_file=key, writer_uid=writer, socket_gid=writer,
+                              policy_file=self.dir / 'gate', signature_file=self.dir / 'sig',
+                              public_key_file=pub, deployment_id='integration',
+                              _research_anchor=anchor, _research_stop_event=stop)
+            except BaseException as exc:
+                status['error'] = repr(exc)
+        # explicitly synthetic runtime approval, as in the research test; not a release approval
+        with mock.patch.object(service, 'verify_signed_runtime_policy',
+                               return_value={'runtime_gate': 'SIGNED_POLICY_AND_RUNTIME_MATCH'}):
+            thread = threading.Thread(target=run_service, daemon=True); thread.start()
+            self.addCleanup(lambda: (stop.set(), thread.join(timeout=5)))
+            for _ in range(500):
+                if sock.exists() or status['error']:
+                    break
+                _time.sleep(0.01)
+            self.assertIsNone(status['error'])
+            program = ('import sys, json\nsys.path.insert(0, sys.argv[3])\n'
+                       'from eq3_wire import client_request, SET, STATUS\n'
+                       'op = SET if sys.argv[2] == "set" else STATUS\n'
+                       'kw = dict(request_id=b"\\x31" * 16, target=b"new") if op == SET else {}\n'
+                       'print(json.dumps(client_request(sys.argv[1], op=op, **kw)))\n')
+            stage = self.dir / 'code'; stage.mkdir()
+            for f in ('eq3_wire.py', 'eq3_engine.py', 'eq3_anchor_types.py'):
+                shutil.copyfile(HERE / f, stage / f)
+            shutil.copyfile(RESEARCH / 'equal3.py', stage / 'equal3.py')
+            stage.chmod(0o755)
+            for f in stage.iterdir():
+                f.chmod(0o644)
+
+            def run_as(uid, cmd):
+                def drop():
+                    os.setgroups([]); os.setgid(writer); os.setuid(uid)
+                return subprocess.run([sys.executable, '-I', '-B', '-c', program, str(sock), cmd, str(stage)],
+                                      preexec_fn=drop, capture_output=True, text=True, timeout=15)
+            good = run_as(writer, 'set')
+            self.assertEqual(good.returncode, 0, (good.stdout, good.stderr))
+            self.assertEqual(json.loads(good.stdout)['error'], 'EXTERNAL_REVIEW_REQUIRED')
+            again = run_as(writer, 'status')
+            self.assertEqual(json.loads(again.stdout)['assessment'], 'COMMITTED_PENDING_HOLD')
+            bad = run_as(unauth, 'status')
+            self.assertNotEqual(bad.returncode, 0)
+            blocked = subprocess.run([sys.executable, '-c', 'import sys; open(sys.argv[1], "rb")', str(key)],
+                                     preexec_fn=lambda: (os.setgroups([]), os.setgid(writer), os.setuid(writer)),
+                                     capture_output=True, text=True, timeout=15)
+            self.assertNotEqual(blocked.returncode, 0)
+            self.assertEqual(r_store.StateStore(db, key=KEY, journal_mode='DELETE').read().value, b'new')
 
 
 class Service(Tmp):

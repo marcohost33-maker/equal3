@@ -115,6 +115,8 @@ research tree. Measured in [verification/2026-11-26_engine-split](../verificatio
 - **Item 2.** The write primitive is reachable only through `CommitCapability`. It commits only
   the proposal that the bound anchor holds as its PREPARED intent: proposal hash, request id,
   store, base, base digest and target digest are compared before the write.
+  - Base and target digest are compared inside the write transaction, on the values the CAS
+    writes.
   - The intent's base must equal the anchor position.
   - The anchor is re-read inside the write transaction, so an ABORT that lands in between
     stops the write.

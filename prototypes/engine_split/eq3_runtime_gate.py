@@ -1,7 +1,8 @@
 """ADR-003 candidate (prototype): copy of research/runtime_gate_v0711.py (v0.7.22).
 
-The only change is the import of sqlite_wal_reset_safe from the leaf eq3_wal_gate instead of
-anchor_wire, which removes this module from the six-module import cycle (ADR-003 item 4).
+Two import changes only: sqlite_wal_reset_safe from the leaf eq3_wal_gate instead of anchor_wire,
+which removes this module from the six-module import cycle (ADR-003 item 4), and the runtime
+inventory from eq3_runtime_evidence, which classifies a built-in _sqlite3 as a HOLD.
 The text below is the original module docstring.
 
 Optional signed SQLite-runtime approval gate for Equal3 research.
@@ -23,7 +24,7 @@ import sys
 import time
 from typing import Any
 
-from runtime_evidence_v0710 import RuntimeEvidenceError, runtime_inventory
+from eq3_runtime_evidence import RuntimeEvidenceError, runtime_inventory
 from eq3_wal_gate import sqlite_wal_reset_safe
 
 SCHEMA = 'equal3.sqlite-runtime-approval.v1'

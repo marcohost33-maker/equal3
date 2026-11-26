@@ -377,12 +377,14 @@ class StateEngine:
             raise ReplayError('request ID reused with different proposal')
         return Receipt(request_id, r['base_version'], r['version'], bytes.fromhex(r['digest_sha256']), True)
 
-    def _commit(self, proposal: bytes, *, guard=None, fault=None):
+    def _commit(self, proposal: bytes, *, guard=None, expect=None, fault=None):
         """The CAS write primitive of StateStore.apply (v0.7.22), unchanged in substance.
 
         Private: the only caller is CommitCapability.commit after its anchor-intent check.
         guard() runs inside the write transaction (after BEGIN IMMEDIATE, before any change)
         and raises to refuse the write; the capability uses it to re-read the anchor.
+        expect (an anchor intent) is compared inside the same transaction with the base the
+        CAS holds and the target digest it is about to write.
         """
         sid, expected_version, rid, _, packet = _parse_proposal(proposal, key=self._key)
         proposal_hash = digest(proposal)
@@ -419,6 +421,10 @@ class StateEngine:
             actual = db.execute('SELECT version,digest FROM head WHERE id=1').fetchone()
             if actual is None or actual[0] != version or not hmac.compare_digest(actual[1], head_digest):
                 raise ConflictError('state advanced or changed after preflight')
+            if expect is not None and (expect.base_version != version or expect.version != version + 1
+                                       or expect.base_digest != head_digest.hex()
+                                       or expect.digest != target_digest.hex()):
+                raise AnchorHold('proposal is not the prepared anchor intent; commit refused')
             schema_row = db.execute('SELECT schema_version,genesis_digest,store_id,key_check FROM meta WHERE id=1').fetchone()
             if schema_row is None or schema_row[0] != 2:
                 raise IntegrityError('unsealed schema cannot authorize write')
@@ -500,13 +506,14 @@ class CommitCapability:
         if (pending.store_id != committed.store_id or pending.base_version != committed.version
                 or pending.base_digest != committed.digest):
             raise AnchorHold('prepared intent is not based on the anchor position; commit refused')
-        # Authenticates the proposal and decodes it against the verified head (reads only).
-        facts = self._engine.describe_proposal(proposal)
-        if (pending.proposal_hash != facts.proposal_hash or pending.request_id != facts.request_id
-                or pending.store_id != facts.store_id or pending.base_version != facts.base_version
-                or pending.base_digest != facts.base_digest or pending.version != facts.base_version + 1
-                or pending.digest != facts.target_digest):
+        # Header fields are authenticated by the proposal HMAC; base digest and target digest are
+        # compared inside the write transaction (_commit, expect=), on the values it writes.
+        sid, base, rid, _, _ = _parse_proposal(proposal, key=self._engine._key)
+        if (pending.proposal_hash != digest(proposal).hex() or pending.request_id != rid.hex()
+                or pending.store_id != sid.hex() or pending.base_version != base
+                or pending.version != base + 1):
             raise AnchorHold('proposal is not the prepared anchor intent; commit refused')
+
         def still_prepared():
             # Re-read inside the write transaction: an ABORT or another transition that landed
             # after the first check must stop the write. A remote anchor needs a lease or fence
@@ -514,7 +521,7 @@ class CommitCapability:
             now = self._anchor.status()
             if now.pending != pending or now.committed != committed:
                 raise AnchorHold('anchor intent changed before the write; commit refused')
-        receipt = self._engine._commit(proposal, guard=still_prepared, fault=fault)
+        receipt = self._engine._commit(proposal, guard=still_prepared, expect=pending, fault=fault)
         if receipt.already_committed or receipt.digest.hex() != pending.digest or receipt.version != pending.version:
             raise AnchorHold('committed result differs from the prepared anchor intent')
         return receipt

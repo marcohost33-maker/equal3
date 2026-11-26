@@ -135,7 +135,7 @@ jobs:
       - name: Stage world-readable tree and venv
         run: |
           sudo install -d -m 0755 /srv/equal3
-          sudo cp -r research tools /srv/equal3/
+          sudo cp -r research tools prototypes /srv/equal3/
           sudo env "LD_LIBRARY_PATH=${LD_LIBRARY_PATH:-}" "$(command -v python)" -m venv /srv/eq3venv
           sudo env "LD_LIBRARY_PATH=${LD_LIBRARY_PATH:-}" /srv/eq3venv/bin/python -m pip install --require-hashes --only-binary :all: -r tools/requirements-ci.lock
           sudo chmod -R a+rX /srv/equal3 /srv/eq3venv
@@ -145,6 +145,16 @@ jobs:
           /srv/eq3venv/bin/python /srv/equal3/tools/run_test_groups.py
           --research-dir /srv/equal3/research --require-no-skips --expect-total 430 --expect-reported
           --json "$RUNNER_TEMP/test-groups-root.json"
+      - name: ADR-003 candidate as root (separate-UID client against the candidate service), no skips
+        if: ${{ !cancelled() }}
+        run: |
+          log="$RUNNER_TEMP/engine-split-root.log"
+          cd /srv/equal3
+          sudo env "LD_LIBRARY_PATH=${LD_LIBRARY_PATH:-}" PYTHONDONTWRITEBYTECODE=1 \
+            /srv/eq3venv/bin/python -W error::ResourceWarning -m unittest -v \
+            prototypes/engine_split/test_engine_split.py > "$log" 2>&1 || { cat "$log"; exit 1; }
+          cat "$log"
+          if grep -q "skipped" "$log"; then echo "a skip is a failure in the root lane"; exit 1; fi
       - name: The system SQLite is mapped by a child dropped to UID 65534 too; the WAL-reset gate holds
         if: ${{ !cancelled() }}
         run: >

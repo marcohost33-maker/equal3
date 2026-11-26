@@ -74,6 +74,12 @@
     "eq3_provision"
   ],
   "legacy_write_api": {
+    "StateEngine": [
+      "create",
+      "apply",
+      "checkpoint",
+      "backup_verified"
+    ],
     "StateStore": [
       "create",
       "apply",

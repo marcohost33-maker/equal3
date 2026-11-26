@@ -1,0 +1,52 @@
+{
+  "python": "3.13.18",
+  "sqlite": "3.53.1",
+  "repeat": 9,
+  "points": {
+    "0": {
+      "research": {
+        "median_ms": 6.38,
+        "full_history_verifications": [
+          9
+        ]
+      },
+      "candidate": {
+        "median_ms": 6.42,
+        "full_history_verifications": [
+          9
+        ]
+      },
+      "ratio": 1.01
+    },
+    "200": {
+      "research": {
+        "median_ms": 16.57,
+        "full_history_verifications": [
+          9
+        ]
+      },
+      "candidate": {
+        "median_ms": 17.17,
+        "full_history_verifications": [
+          9
+        ]
+      },
+      "ratio": 1.04
+    },
+    "1000": {
+      "research": {
+        "median_ms": 72.13,
+        "full_history_verifications": [
+          9
+        ]
+      },
+      "candidate": {
+        "median_ms": 72.38,
+        "full_history_verifications": [
+          9
+        ]
+      },
+      "ratio": 1.0
+    }
+  }
+}
